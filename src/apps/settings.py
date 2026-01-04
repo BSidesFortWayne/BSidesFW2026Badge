@@ -47,7 +47,7 @@ def rgb565_to_hex(rgb565: int) -> str:
     return f'#{r8:02X}{g8:02X}{b8:02X}'
 
 class App(BaseApp):
-    name = "Settings"
+    name = "WiFi Settings"
     def __init__(self, controller):
         super().__init__(controller)
         self.display1 = self.controller.bsp.displays.display1
@@ -90,10 +90,6 @@ class App(BaseApp):
         if ap:
             self.password = generate_random_password()
             self.ssid = f'Badge {self.badge_id}'
-        qr_data = QRData(f'WIFI:S:{self.ssid};T:WPA;P:{self.password};H:false;;'.encode(), mode=MODE_8BIT_BYTE)
-
-        self.qr = QRCode()
-        self.qr.add_data(qr_data) # WiFi QR code
 
         self.start_wifi(self.ssid, self.password, ap=ap)
 
@@ -101,21 +97,30 @@ class App(BaseApp):
 
         print(f"Pre-fill, SSID is \"{self.ssid}\", password is {self.password}")
 
-        while self.qr is None:
-            sleep_ms(10)
-        
-        matrix = self.qr.get_matrix()
-        if matrix is None or matrix[0] is None:
-            self.draw_status("Error Generating")
-            return
-        
-        self.display1.fill(gc9a01.WHITE)
+        # Only show QR code for AP mode, show network info for normal WiFi
+        if ap:
+            qr_data = QRData(f'WIFI:S:{self.ssid};T:WPA;P:{self.password};H:false;;'.encode(), mode=MODE_8BIT_BYTE)
+            self.qr = QRCode()
+            self.qr.add_data(qr_data) # WiFi QR code
+            
+            while self.qr is None:
+                sleep_ms(10)
+            
+            matrix = self.qr.get_matrix()
+            if matrix is None or matrix[0] is None:
+                self.draw_status("Error Generating")
+                return
+            
+            self.display1.fill(gc9a01.WHITE)
 
-        for y, row in enumerate(matrix):
-            for x, value in enumerate(row): # type: ignore
-                if value:
-                    # TODO calculate width and height and scale?
-                    self.display1.fill_rect(15+x*5, 15+y*5, 5, 5, gc9a01.BLACK)
+            for y, row in enumerate(matrix):
+                for x, value in enumerate(row): # type: ignore
+                    if value:
+                        # TODO calculate width and height and scale?
+                        self.display1.fill_rect(15+x*5, 15+y*5, 5, 5, gc9a01.BLACK)
+        else:
+            # For normal WiFi connections, display network information
+            self.display_network_info()
 
     def start_wifi(self, essid, password, ap=True):
         import network
@@ -154,117 +159,210 @@ class App(BaseApp):
         )
     
     async def start_website(self):
-        app = Microdot()
+        try:
+            app = Microdot()
 
-        Template.initialize('website/templates')
+            Template.initialize('website/templates')
 
-        Response.default_content_type = 'text/html'
+            Response.default_content_type = 'text/html'
 
-        @app.route('/static/<path:path>')
-        async def static(request, path):
-            if '..' in path:
-                # directory traversal
-                return 'Not found', 404
-            return send_file('/website/static/' + path, max_age=86400)
+            @app.route('/static/<path:path>')
+            async def static(request, path):
+                if '..' in path:
+                    # directory traversal
+                    return 'Not found', 404
+                return send_file('/website/static/' + path, max_age=86400)
 
-        @app.route('/')
-        async def home(request):
-            return Template('home.html').render(
-                path='/',
-                badge_id=self.badge_id,
-                battery_voltage=str(self.controller.battery.mv_average.average()/100) + 'v',
-                battery_percentage='{}%'.format(self.controller.battery.get_battery_percentage()),
-                current_app=self.controller.current_view.name if self.controller.current_view else 'None',
-            )
+            @app.route('/')
+            async def home(request):
+                return Template('home.html').render(
+                    path='/',
+                    badge_id=self.badge_id,
+                    battery_voltage=str(self.controller.battery.mv_average.average()/100) + 'v',
+                    battery_percentage='{}%'.format(self.controller.battery.get_battery_percentage()),
+                    current_app=self.controller.current_view.name if self.controller.current_view else 'None',
+                )
 
 
 
-        @app.get('/add_app')
-        async def add_app(request):
-            # Get list of existing app files
-            apps = [f[:-3] for f in os.listdir('apps') if f.endswith('.py') and f != '__init__.py']
-            return Template('add_app.html').render(
-                path='/add_app',
-                apps=apps
-            )
+            @app.get('/add_app')
+            async def add_app(request):
+                # Get list of existing app files
+                apps = [f[:-3] for f in os.listdir('apps') if f.endswith('.py') and f != '__init__.py']
+                return Template('add_app.html').render(
+                    path='/add_app',
+                    apps=apps
+                )
 
-        @app.get('/get_app_code')
-        async def get_app_code(request):
-            app_name = request.args.get('app_name')
-            if app_name:
-                try:
-                    with open(f'apps/{app_name}.py', 'r') as f:
-                        return f.read()
-                except:
-                    return 'Error: App not found', 404
-            return 'Error: No app specified', 400
-
-        @app.post('/add_app/submit')
-        @with_form_data
-        async def handle_add_app(request):
-            app_name = request.form['app_name']
-            app_code = request.form['app_code']
-
-            # Save the new app file
-            with open(f'apps/{app_name}.py', 'w') as f:
-                f.write(app_code)
-
-        @app.get('/config')
-        async def config(request):
-            return Template('config.html').render(
-                path='/config',
-                rgb565_to_hex=rgb565_to_hex,
-                app_configs=self.controller.app_configs.items()
-            )
-        
-        
-        @app.post('/config/update')
-        @with_form_data
-        async def update_config(request):
-            print(request.form['appSelection'])
-            app = request.form['appSelection']
-            app_config = self.controller.app_configs[app]
-            for config_name, value in request.form.items():
-                if config_name not in app_config:
-                    print(f"Skipping unknown config: {config_name} for app {app}")
-                    continue
-                existing_config = app_config[config_name]
-                existing_type = type(existing_config)
-                print(f"Updating {app} config: {config_name} = {value}")
-
-                if existing_type is not str and existing_type is not int and 'type' in existing_config:
-                    existing_config_type = existing_config['type']
-
-                    # Convert value
-                    if existing_config_type == 'BoolDropdownConfig':
-                        # TODO weird hack for bools... fine for now, need to work it out better
-                        # Don't ask :-) 
-                        value = True if len(value) == 2 else False
-                    else:
-                        value = value[0]
-
-                    
-                    if existing_config_type == 'BoolDropdownConfig':
-                        existing_config['current'] = value
-                    if existing_config_type == 'EnumConfig':
-                        existing_config['current'] = value
-                    elif existing_config_type == 'ColorConfig':
-                        existing_config['current'] = hex_to_rgb565(value)
-                    elif existing_config_type == 'RangeConfig':
-                        existing_config['current'] = int(value)
-                elif existing_type is str:
-                    self.controller.app_configs[app][config_name] = str(value[0])
-                elif existing_type is int:
+            @app.get('/get_app_code')
+            async def get_app_code(request):
+                app_name = request.args.get('app_name')
+                if app_name:
                     try:
-                        self.controller.app_configs[app][config_name] = int(value[0])
-                    except ValueError:
-                        pass
-                else:
-                    print(f"Unknown config type for {app} {config_name}: {existing_type}")
-                    
+                        with open(f'apps/{app_name}.py', 'r') as f:
+                            return f.read()
+                    except Exception:
+                        return 'Error: App not found', 404
+                return 'Error: No app specified', 400
 
-            # return Response.redirect('/config')
-        app.run(port=80)
+            @app.post('/add_app/submit')
+            @with_form_data
+            async def handle_add_app(request):
+                app_name = request.form['app_name']
+                app_code = request.form['app_code']
+
+                # Save the new app file
+                with open(f'apps/{app_name}.py', 'w') as f:
+                    f.write(app_code)
+
+            @app.get('/config')
+            async def config(request):
+                return Template('config.html').render(
+                    path='/config',
+                    rgb565_to_hex=rgb565_to_hex,
+                    app_configs=self.controller.app_configs.items(),
+                    service_configs=self.controller.service_configs.items(),
+                    system_config=self.controller.system_config.config
+                )
+            
+            
+            @app.post('/config/update')
+            @with_form_data
+            async def update_config(request):
+                config_type = request.form.get('configType', 'app')
+                
+                if config_type == 'system':
+                    # Handle system configuration updates
+                    system_config = self.controller.system_config.config
+                    for config_name, value in request.form.items():
+                        if config_name in ['configType']:  # Skip form metadata
+                            continue
+                        if config_name not in system_config:
+                            print(f"Skipping unknown system config: {config_name}")
+                            continue
+                        
+                        existing_config = system_config[config_name]
+                        print(f"Updating system config: {config_name} = {value}")
+                        self._update_config_value(existing_config, value)
+                            
+                elif config_type == 'service':
+                    # Handle service configuration updates
+                    service_name = request.form.get('serviceSelection')
+                    if service_name and service_name in self.controller.service_configs:
+                        service_config = self.controller.service_configs[service_name]
+                        for config_name, value in request.form.items():
+                            if config_name in ['configType', 'serviceSelection']:  # Skip form metadata
+                                continue
+                            if config_name not in service_config:
+                                print(f"Skipping unknown config: {config_name} for service {service_name}")
+                                continue
+                            
+                            existing_config = service_config[config_name]
+                            print(f"Updating {service_name} service config: {config_name} = {value}")
+                            self._update_config_value(existing_config, value)
+                            
+                else:
+                    # Handle app configuration updates (existing logic)
+                    app = request.form['appSelection']
+                    app_config = self.controller.app_configs[app]
+                    for config_name, value in request.form.items():
+                        if config_name in ['configType', 'appSelection']:  # Skip form metadata
+                            continue
+                        if config_name not in app_config:
+                            print(f"Skipping unknown config: {config_name} for app {app}")
+                            continue
+                        
+                        existing_config = app_config[config_name]
+                        print(f"Updating {app} config: {config_name} = {value}")
+                        self._update_config_value(existing_config, value)
+
+                # return Response.redirect('/config')
+        except Exception as e:
+            print(f"Error starting web server: {e}")
+            return
+        
+    def _update_config_value(self, existing_config, value):
+        """Helper method to update config values based on their type."""
+        existing_type = type(existing_config)
+        if existing_type is not str and existing_type is not int and 'type' in existing_config:
+            existing_config_type = existing_config['type']
+            # Convert value
+            if existing_config_type == 'BoolDropdownConfig':
+                value = True if len(str(value)) == 2 else False
+            else:
+                value = value[0] if isinstance(value, list) else value
+            if existing_config_type == 'BoolDropdownConfig':
+                existing_config['current'] = value
+            elif existing_config_type == 'EnumConfig':
+                existing_config['current'] = value
+            elif existing_config_type == 'ColorConfig':
+                existing_config['current'] = hex_to_rgb565(str(value))
+            elif existing_config_type == 'RangeConfig':
+                existing_config['current'] = int(value)
+        elif existing_type is str:
+            existing_config = str(value[0] if isinstance(value, list) else value)
+        elif existing_type is int:
+            try:
+                existing_config = int(value[0] if isinstance(value, list) else value)
+            except ValueError:
+                pass
+        else:
+            print(f"Unknown config type: {existing_type}")
+
+
+    def display_network_info(self):
+        """Display network connection information instead of QR code"""
+        self.display1.fill(gc9a01.WHITE)
+        
+        # Display WiFi network name
+        self.display1.write(
+            self.font,
+            'Connected to:',
+            10,
+            30,
+            gc9a01.BLACK,
+            gc9a01.WHITE
+        )
+        
+        # Display SSID (truncate if too long)
+        ssid_display = self.ssid[:15] + '...' if len(self.ssid) > 15 else self.ssid
+        self.display1.write(
+            self.font,
+            ssid_display,
+            10,
+            70,
+            gc9a01.BLACK,
+            gc9a01.WHITE
+        )
+        
+        # Display connection status
+        self.display1.write(
+            self.font,
+            'Status: Active',
+            10,
+            110,
+            gc9a01.BLACK,
+            gc9a01.WHITE
+        )
+        
+        # Display web interface info
+        self.display1.write(
+            self.font,
+            'Web Config:',
+            10,
+            150,
+            gc9a01.BLACK,
+            gc9a01.WHITE
+        )
+        
+        self.display1.write(
+            self.font,
+            'See IP below',
+            10,
+            190,
+            gc9a01.BLACK,
+            gc9a01.WHITE
+        )
 
     def draw_status(self, status: str = 'Loading...'):
         self.display1.write(

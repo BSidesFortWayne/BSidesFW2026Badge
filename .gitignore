@@ -6,6 +6,13 @@ node_modules
 src/config/*.json
 src/config/**/*.json
 
+app_directory_cache.json
+
+# .bin firmware files
+*.bin
+
+src_temp
+
 # Hide the CTF related files... :-) 
 src/apps/*ctf.py
 tests/test_ctf.py

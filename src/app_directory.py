@@ -28,7 +28,13 @@ class AppMetadata:
             return []
         
         print(f"Loading {module_name}")
-        __import__(f"apps.{module_name}")
+        # TODO add try/catch for the module
+        try:
+            __import__(f"apps.{module_name}")
+        except Exception as e:
+            print(f"Error importing module {module_name}: {e}")
+            return []
+
         module = getattr(apps, module_name, None)
         if not module:
             # TODO show a popup or just return?

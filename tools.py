@@ -106,6 +106,15 @@ def add_song(midi_filename: str, song_id: str):
     song_file.write(json.dumps(notes_data))
     song_file.close()
 
+
+@app.command()
+def clear_app_cache():
+    """
+    Clear the application directory cache.
+    """
+    os.system("mpremote rm :config/app_directory_cache.json")
+
+
 @app.command()
 def write_flash(
     file: str, 
@@ -160,10 +169,7 @@ def program_device(
 
     # Load python code with mpremote
     start_file_send_time = time.time()
-    if test_app_only:
-        os.system('mpremote run src/test.py :main.py')
-    else:
-        deploy_app_to_device('src_temp')
+    os.system('mpremote run src/test.py :main.py')
     end_file_send_time = time.time()
     elapsed_file_send_time = end_file_send_time - start_file_send_time
     if verbose:
@@ -307,6 +313,133 @@ def program_name(
     os.system("uv run mpremote mkdir :config")
     os.system("uv run mpremote mkdir :config/apps")
     os.system("uv run mpremote cp name.json :config/apps/Badge.json + reset")
+
+
+@app.command(
+    help="Send a message to the Remote Sign app via UDP"
+)
+def remote_sign(
+    badge_ip: str,
+    display1: str = "Hello",
+    display2: str = "Badge",
+    port: int = 8888,
+):
+    """
+    Send a message to the Remote Sign app running on a badge.
+    
+    The display messages support multi-line format using '|' separator.
+    Example: "UDP|Server" will display "UDP" on top and "Server" on bottom.
+    
+    Args:
+        badge_ip: IP address of the badge
+        display1: Message for top display (use | for multi-line)
+        display2: Message for bottom display (use | for multi-line)
+        port: UDP port (default 8888)
+    
+    Examples:
+        uv run python tools.py remote-sign 192.168.1.100 "Alert" "System Down"
+        uv run python tools.py remote-sign 192.168.1.100 "UDP|Active" "Ready|Go"
+    """
+    import socket
+    
+    try:
+        # Create the command
+        command = {
+            "action": "set_message",
+            "display1": display1,
+            "display2": display2
+        }
+        
+        # Send via UDP
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(5.0)
+        
+        data = json.dumps(command).encode('utf-8')
+        sock.sendto(data, (badge_ip, port))
+        
+        # Wait for response
+        response_data, _ = sock.recvfrom(1024)
+        response = json.loads(response_data.decode('utf-8'))
+        
+        sock.close()
+        
+        if response.get("status") == "ok":
+            print(f"✓ Message sent successfully to {badge_ip}:{port}")
+            print(f"  Display 1: {display1}")
+            print(f"  Display 2: {display2}")
+        else:
+            print(f"✗ Error: {response.get('message', 'Unknown error')}")
+            
+    except socket.timeout:
+        print(f"✗ Timeout - no response from badge at {badge_ip}:{port}")
+        print("  Make sure the badge is on WiFi and Remote Sign app is running with UDP enabled")
+    except Exception as e:
+        print(f"✗ Error: {e}")
+
+
+@app.command(
+    help="Control Remote Sign LEDs via UDP"
+)
+def remote_sign_led(
+    badge_ip: str,
+    led_index: int = -1,
+    red: int = 255,
+    green: int = 0,
+    blue: int = 0,
+    brightness: int = 50,
+    port: int = 8888,
+):
+    """
+    Control the LEDs on the Remote Sign badge.
+    
+    Args:
+        badge_ip: IP address of the badge
+        led_index: LED index (0-6, or -1 for all LEDs)
+        red: Red value (0-255)
+        green: Green value (0-255)
+        blue: Blue value (0-255)
+        brightness: Brightness percentage (0-100)
+        port: UDP port (default 8888)
+    
+    Examples:
+        uv run python tools.py remote-sign-led 192.168.1.100 -1 255 0 0 75
+        uv run python tools.py remote-sign-led 192.168.1.100 0 0 255 0 50
+    """
+    import socket
+    
+    try:
+        # Create the command
+        command = {
+            "action": "set_led",
+            "led": led_index,
+            "color": [red, green, blue],
+            "brightness": brightness
+        }
+        
+        # Send via UDP
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.settimeout(5.0)
+        
+        data = json.dumps(command).encode('utf-8')
+        sock.sendto(data, (badge_ip, port))
+        
+        # Wait for response
+        response_data, _ = sock.recvfrom(1024)
+        response = json.loads(response_data.decode('utf-8'))
+        
+        sock.close()
+        
+        if response.get("status") == "ok":
+            led_desc = "All LEDs" if led_index == -1 else f"LED {led_index}"
+            print(f"✓ {led_desc} set to RGB({red},{green},{blue}) at {brightness}% brightness")
+        else:
+            print(f"✗ Error: {response.get('message', 'Unknown error')}")
+            
+    except socket.timeout:
+        print(f"✗ Timeout - no response from badge at {badge_ip}:{port}")
+    except Exception as e:
+        print(f"✗ Error: {e}")
+
 
 if __name__ == "__main__":
     app()
