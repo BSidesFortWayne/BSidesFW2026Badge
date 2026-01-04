@@ -1,1 +1,6 @@
 /src
+/logs
+*.log
+*.jsonl
+__pycache__/
+*.pyc

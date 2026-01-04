@@ -1,0 +1,24 @@
+{
+  "project_path": "../src",
+  "micropython_path": "micropython",
+  "socket_port": 4455,
+  "socket_host": "127.0.0.1",
+  "logging": {
+    "enabled": true,
+    "output_dir": "logs",
+    "log_micropython": true,
+    "log_gui_commands": false,
+    "log_button_polling": false,
+    "structured_output": true
+  },
+  "gui": {
+    "window_title": "BSides FW 2025 Badge Simulator",
+    "show_fps": false,
+    "target_fps": 60
+  },
+  "debug": {
+    "verbose": false,
+    "print_commands": false,
+    "print_startup": true
+  }
+}

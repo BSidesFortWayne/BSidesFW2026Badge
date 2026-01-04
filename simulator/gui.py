@@ -28,8 +28,21 @@ def get_vga_text(font, string):
         x += width
 
 class GUI:
-    def __init__(self):
+    def __init__(self, config=None, logger=None):
+        # Store config and logger
+        self.config = config or {}
+        self.logger = logger
+        
+        # Get GUI config
+        gui_config = self.config.get('gui', {})
+        window_title = gui_config.get('window_title', 'BSides FW 2025 Badge Simulator')
+        self.show_fps = gui_config.get('show_fps', False)
+        self.target_fps = gui_config.get('target_fps', 60)
+        
+        # Initialize pygame display
         self.display = pygame.display.set_mode((560, 1060))
+        pygame.display.set_caption(window_title)
+        
         self.board_texture = pygame.image.load('board_render.png')
         self.running = True
         self.screen1 = pygame.Surface((240, 240))
@@ -42,6 +55,11 @@ class GUI:
             1 << 1,  # 0000 0000 0000 0010
             1 << 2,  # 0000 0000 0000 0100
         ]
+        
+        # FPS tracking
+        self.clock = pygame.time.Clock()
+        self.frame_count = 0
+        self.fps_display_font = pygame.font.Font(None, 24)
     
     def rgb565_to_rgb(self, color):
         r = (color & 0xF800) >> 8
@@ -195,9 +213,7 @@ class GUI:
 
     def gameloop(self):
         while self.running:
-            self.display.blit(self.generate_circular_cutout(self.screen1), (70, 558))
-            self.display.blit(self.generate_circular_cutout(self.screen2), (234, 774))
-            self.display.blit(self.board_texture, (0, 0))
+            # Handle events
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
@@ -224,5 +240,20 @@ class GUI:
                         self.button_states[3] = 0
                     elif event.key == pygame.K_5:
                         self.button_states[4] = 0
-
+            
+            # Render displays
+            self.display.blit(self.board_texture, (0, 0))
+            self.display.blit(self.generate_circular_cutout(self.screen1), (70, 558))
+            self.display.blit(self.generate_circular_cutout(self.screen2), (234, 774))
+            
+            # Show FPS if enabled
+            if self.show_fps:
+                fps = self.clock.get_fps()
+                fps_text = self.fps_display_font.render(f'FPS: {fps:.1f}', True, (255, 255, 0))
+                self.display.blit(fps_text, (10, 10))
+            
             pygame.display.update()
+            
+            # Limit frame rate
+            self.clock.tick(self.target_fps)
+            self.frame_count += 1
