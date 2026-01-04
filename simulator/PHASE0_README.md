@@ -36,6 +36,61 @@ Phase 0 establishes the foundation for simulator development with improved loggi
    - Event types: startup, micropython, command, error, warning, info
    - Timestamp on all events
 
+## Prerequisites
+
+### Operating System Support
+
+- ✅ **Linux** - Fully supported
+- ✅ **macOS** - Supported
+- ❌ **Windows** - Not yet supported (use WSL2 as workaround)
+
+### Required: MicroPython Unix Port
+
+The simulator requires MicroPython (Unix port) to run the badge firmware.
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get update
+sudo apt-get install micropython
+```
+
+**Fedora:**
+```bash
+sudo dnf install micropython
+```
+
+**macOS (Homebrew):**
+```bash
+brew install micropython
+```
+
+**Build from Source** (if package not available or outdated):
+```bash
+# Clone MicroPython repository
+git clone https://github.com/micropython/micropython.git
+cd micropython
+
+# Build Unix port
+cd ports/unix
+make submodules
+make
+
+# Binary will be at: build-standard/micropython
+# Use with: ./run.sh -m ~/micropython/ports/unix/build-standard/micropython
+```
+
+**Verify installation:**
+```bash
+micropython --version
+# Should output: MicroPython v1.22.0 or similar
+```
+
+### Python Dependencies
+
+```bash
+pip install pygame Pillow
+```
+
 ## Usage
 
 ### Quick Start
@@ -44,6 +99,8 @@ Phase 0 establishes the foundation for simulator development with improved loggi
 cd simulator
 ./run.sh
 ```
+
+**Note:** If you get "micropython not found" error, install it using the instructions above.
 
 ### With Options
 
@@ -202,12 +259,45 @@ lsof -ti:4455 | xargs kill
 # Or update config.json
 ```
 
+### MicroPython Not Found
+
+```bash
+# Install MicroPython
+sudo apt-get install micropython  # Ubuntu/Debian
+brew install micropython           # macOS
+
+# Or specify full path
+./run.sh -m /path/to/micropython
+
+# Or update config.json with path
+```
+
 ### Dependencies Missing
 
 ```bash
 # Install pygame and Pillow
 pip install pygame Pillow
 ```
+
+### Windows Support
+
+Windows is not currently supported. Workaround:
+
+1. **Use WSL2** (Windows Subsystem for Linux):
+   ```bash
+   # In PowerShell (as Administrator)
+   wsl --install
+   
+   # After restart, in WSL terminal
+   sudo apt-get update
+   sudo apt-get install micropython python3-pip
+   pip install pygame Pillow
+   
+   cd /mnt/c/path/to/BSidesFW2025Badge/simulator
+   ./run.sh
+   ```
+
+2. **Note:** GUI display from WSL requires X server (VcXsrv, X410) or WSLg on Windows 11
 
 ### Logs Too Large
 
