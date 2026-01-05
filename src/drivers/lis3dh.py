@@ -191,9 +191,11 @@ class LIS3DH(Driver):
         if adc < 1 or adc > 3:
             raise ValueError("ADC must be a value 1 to 3!")
 
-        return struct.unpack(
+        raw_adc_counts = struct.unpack(
             "<h", self._read_register((_REG_OUTADC1_L + ((adc - 1) * 2)) | 0x80, 2)[0:2]
         )[0]
+        # print(f"[DEBUG] Read ADC{adc} raw counts: {raw_adc_counts}")
+        return raw_adc_counts
 
     def read_adc_mV(self, adc): 
         """Read the specified analog to digital converter value in millivolts.
@@ -212,7 +214,7 @@ class LIS3DH(Driver):
         #   y0 = 1800
         #   y1 = 900
         raw_mv = 1800+(raw+32512)*(-900/65024)
-        print(f"[DEBUG] ADC raw: {raw}, mV: {raw_mv}")
+        # print(f"[DEBUG] ADC raw: {raw}, mV: {raw_mv}")
         return raw_mv
 
     @property
@@ -350,7 +352,7 @@ class LIS3DH_I2C(LIS3DH):
                 # Read the accelerometer values
                 value = read_value()
                 self.log(f"Read value: {value}", tag)
-                print(f"[LIS3DH {tag}] Calling {len(callbacks)} callbacks with value: {value}")
+                # print(f"[LIS3DH {tag}] Calling {len(callbacks)} callbacks with value: {value}")
                 await asyncio.gather(*(callback(value) for callback in callbacks))
 
                 end_time = time.time()

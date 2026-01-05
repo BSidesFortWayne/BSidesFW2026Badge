@@ -100,6 +100,9 @@ class GUIEnhanced:
         self.bluetooth_state = 'disabled'
         self.charge_state = 'not_charging'
         
+        # Queue for pending interrupts (pin_num, edge_type)
+        self.interrupt_queue = []
+        
         # Create UI controls
         self._create_ui_controls()
     
@@ -293,6 +296,11 @@ class GUIEnhanced:
         ]
         if self.logger:
             self.logger.log_info(f'Shake applied: X={self.accel_data[0]:.2f}g Y={self.accel_data[1]:.2f}g Z={self.accel_data[2]:.2f}g')
+        
+        # Queue motion interrupt on pin 34 (LIS3DH INT2 pin)
+        self.interrupt_queue.append({'pin': 34, 'edge': 'rising'})
+        if self.logger:
+            self.logger.log_info('Motion interrupt queued for pin 34')
     
     def _decay_shake(self):
         """Gradually return accelerometer to rest state (0, 0, 1g)"""
@@ -436,13 +444,19 @@ class GUIEnhanced:
                 if pin_num == 0:
                     return 0 if self.button_states[0] > 0 else 1
                 return 1
+            elif command['command'] == 'poll_interrupts':
+                # Return and clear all pending interrupts
+                interrupts = self.interrupt_queue.copy()
+                self.interrupt_queue.clear()
+                if interrupts and self.logger:
+                    self.logger.log_info(f'Returning {len(interrupts)} pending interrupt(s)')
+                return interrupts
         elif command['module'] == 'neopixel':
             if command['command'] == 'write':
                 leds_grb = command['parameters']['leds'][:7]
                 self.leds = [(r, b, g) for g, r, b in leds_grb]
         elif command['module'] == 'lis3dh':
             # Mock accelerometer data
-            print(f"[GUI] lis3dh command received: {command['command']}")
             if command['command'] == 'acceleration' or command['command'] == 'get_acceleration':
                 # Return current accel data
                 return {
@@ -451,11 +465,9 @@ class GUIEnhanced:
                     'z': self.accel_data[2]
                 }
         elif command['module'] == 'adc':
-            print(f"[GUI] adc command received: {command['command']}")
             # Mock ADC readings (battery voltage, etc)
             if command['command'] == 'read' or command['command'] == 'get_voltage':
                 divided_voltage = self._calculate_divided_voltage()
-                print(f"[GUI] Battery: {self.adc_voltage:.2f}V, Divided: {divided_voltage:.1f}mV")
                 return divided_voltage  # Return in mV
 
     def get_inputs(self, input_list):

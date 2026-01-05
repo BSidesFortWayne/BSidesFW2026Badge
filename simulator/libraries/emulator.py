@@ -34,3 +34,10 @@ def send_command(module, command, **kwargs):
         'parameters': kwargs
     }
     return get_socket().send(json.dumps(payload).encode() + b'\n')
+
+def poll_interrupts():
+    """Poll for pending hardware interrupts from the GUI.
+    Returns list of interrupt events: [{'pin': 34, 'edge': 'rising'}, ...]
+    """
+    result = send_command('pin', 'poll_interrupts')
+    return result.get('resp', [])

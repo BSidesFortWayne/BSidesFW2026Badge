@@ -17,6 +17,8 @@ CMD_FILL_CIRCLE = 0x06
 CMD_BLIT_BUFFER = 0x10
 CMD_GET_INPUTS = 0x20
 CMD_PIN_VALUE = 0x21
+CMD_POLL_INTERRUPTS = 0x22
+CMD_NEOPIXEL_WRITE = 0x30
 
 class BinaryProtocolHandler:
     """Handles binary protocol commands for the GUI"""
@@ -53,6 +55,10 @@ class BinaryProtocolHandler:
                 return self._handle_get_inputs()
             elif cmd_id == CMD_PIN_VALUE:
                 return self._handle_pin_value(payload)
+            elif cmd_id == CMD_POLL_INTERRUPTS:
+                return self._handle_poll_interrupts()
+            elif cmd_id == CMD_NEOPIXEL_WRITE:
+                return self._handle_neopixel_write(payload)
             else:
                 return (1, None)  # Unknown command
         except Exception as e:
@@ -153,6 +159,28 @@ class BinaryProtocolHandler:
         """Read GPIO pin value"""
         pin_num = struct.unpack('<B', payload)[0]
         if pin_num == 0:
+    
+    def _handle_poll_interrupts(self):
+        """Poll for pending interrupts"""
+        import json
+        interrupts = self.gui.interrupt_queue.copy()
+        self.gui.interrupt_queue.clear()
+        if interrupts and self.gui.logger:
+            self.gui.logger.log_info(f'Returning {len(interrupts)} pending interrupt(s)')
+        # Return as JSON encoded bytes
+        return (0, json.dumps(interrupts).encode('utf-8'))
+    
+    def _handle_neopixel_write(self, payload):
+        """Handle neopixel LED writes"""
+        # Payload is 7 LEDs * 3 bytes (GRB) = 21 bytes
+        leds_grb = []
+        for i in range(0, min(len(payload), 21), 3):
+            if i + 2 < len(payload):
+                g, r, b = struct.unpack('BBB', payload[i:i+3])
+                leds_grb.append((g, r, b))
+        # Convert from GRB to RGB for rendering
+        self.gui.leds = [(r, b, g) for g, r, b in leds_grb]
+        return (0, None)
             value = 0 if self.gui.button_states[0] > 0 else 1
         else:
             value = 1

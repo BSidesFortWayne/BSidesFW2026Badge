@@ -38,13 +38,13 @@ class Battery:
         self.controller.bsp.imu.adc_callbacks.append(self.adc_callback)
     
     async def adc_callback(self, value):
-        print(f"[Battery] ADC callback received: {value} (type: {type(value)})")
+        # print(f"[Battery] ADC callback received: {value} (type: {type(value)})")
         if not value:
-            print(f"[Battery] Value is falsy, returning")
+            # print(f"[Battery] Value is falsy, returning")
             return
-        print(f"[Battery] ADC callback adding {value}mV to rolling average")
+        # print(f"[Battery] ADC callback adding {value}mV to rolling average")
         self.mv_average.add(value)
-        print(f"[Battery] Rolling average now: {self.mv_average.average()}mV")
+        # print(f"[Battery] Rolling average now: {self.mv_average.average()}mV")
         now = time.time()
         time_since_log = now - self.last_log_time
         if time_since_log > self.seconds_between_log:

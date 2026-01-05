@@ -31,6 +31,8 @@ CMD_FILL_CIRCLE = 0x06
 CMD_BLIT_BUFFER = 0x10
 CMD_GET_INPUTS = 0x20
 CMD_PIN_VALUE = 0x21
+CMD_POLL_INTERRUPTS = 0x22
+CMD_NEOPIXEL_WRITE = 0x30
 
 class EmulatorBinaryCommunication:
     def __init__(self):
@@ -130,3 +132,23 @@ def send_pin_value(pin):
     if status == 0 and data:
         return struct.unpack('<B', data)[0]
     return 1
+
+def poll_interrupts():
+    """Poll for pending hardware interrupts from the GUI.
+    Returns list of interrupt events: [{'pin': 34, 'edge': 'rising'}, ...]
+    """
+    status, data = get_binary_socket().send_command(CMD_POLL_INTERRUPTS, b'')
+    if status == 0 and data:
+        # Parse JSON response for interrupt list
+        import json
+        return json.loads(data.decode('utf-8'))
+    return []
+
+def send_neopixel_write(leds):
+    """Write LED data (7 LEDs, GRB format, 3 bytes each)"""
+    # Convert list of tuples to flat bytes: [(g,r,b), ...] -> bytes
+    payload = b''
+    for led in leds[:7]:  # Max 7 LEDs
+        g, r, b = led
+        payload += struct.pack('BBB', g, r, b)
+    return get_binary_socket().send_command(CMD_NEOPIXEL_WRITE, payload)

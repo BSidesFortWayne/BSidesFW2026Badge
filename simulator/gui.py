@@ -91,6 +91,9 @@ class GUI:
         self.clock = pygame.time.Clock()
         self.frame_count = 0
         self.fps_display_font = pygame.font.Font(None, 24)
+        
+        # Queue for pending interrupts (pin_num, edge_type)
+        self.interrupt_queue = []
     
     def rgb565_to_rgb(self, color):
         r = (color & 0xF800) >> 8
@@ -258,6 +261,13 @@ class GUI:
                     # Return 1 if button 0 is NOT pressed (pull-up), 0 if pressed
                     return 0 if self.button_states[0] > 0 else 1
                 return 1  # Default high for other pins
+            elif command['command'] == 'poll_interrupts':
+                # Return and clear all pending interrupts
+                interrupts = self.interrupt_queue.copy()
+                self.interrupt_queue.clear()
+                if interrupts and self.logger:
+                    self.logger.log_info(f'Returning {len(interrupts)} pending interrupt(s)')
+                return interrupts
         elif command['module'] == 'neopixel':
             if command['command'] == 'write':
                 # Update LED state from badge
