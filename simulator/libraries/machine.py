@@ -18,11 +18,16 @@ class Pin:
         pass
 
     def value(self, state=None):
-        emulator.send_command('pin', 'value', pin=self.pin, value=self._value)
         if state == None:
+            # Read state from emulator for input pins
+            if self.mode == Pin.IN:
+                result = emulator.send_command('pin', 'value', pin=self.pin, value=self._value)
+                if 'resp' in result:
+                    return result['resp']
             return self._value
         else:
             self._value = state
+            emulator.send_command('pin', 'value', pin=self.pin, value=self._value)
     
     def on(self):
         self._value = 1
@@ -39,13 +44,28 @@ class Pin:
         })
 
 class PWM:
-    def __init__(self, pin):
+    def __init__(self, pin, freq=None, duty=None, duty_u16=None):
         self.pin = pin
+        self._freq = freq or 1000
+        self._duty = duty or 0
+        self._duty_u16 = duty_u16 or 0
     
-    def duty(self, value):
+    def duty(self, value=None):
+        if value is None:
+            return self._duty
+        self._duty = value
         emulator.send_command('pwm', 'duty', value=value)
     
-    def freq(self, value):
+    def duty_u16(self, value=None):
+        if value is None:
+            return self._duty_u16
+        self._duty_u16 = value
+        emulator.send_command('pwm', 'duty_u16', value=value)
+    
+    def freq(self, value=None):
+        if value is None:
+            return self._freq
+        self._freq = value
         emulator.send_command('pwm', 'freq', value=value)
 
 class I2C:
@@ -71,7 +91,67 @@ class I2C:
         return [0 for x in range(byte_amount)]
 
     def readfrom_mem(self, address, port, byte_amount, stop=True):
-        return [0 for x in range(byte_amount)]
+        # Return device-specific values for simulator
+        # LIS3DH WHO_AM_I register (0x0F) should return 0x33
+        if address == 0x18 and port == 0x0F:
+            return bytes([0x33])
+        
+        # LIS3DH Accelerometer data registers (0x28-0x2D: X_L, X_H, Y_L, Y_H, Z_L, Z_H)
+        # Reading with auto-increment (0x80 bit set) returns 6 bytes
+        if address == 0x18 and (port & 0x7F) == 0x28:
+            import emulator
+            import struct
+            # Get acceleration data from GUI (in g's)
+            accel_data = emulator.send_command('lis3dh', 'get_acceleration')
+            if accel_data and 'resp' in accel_data:
+                x_g = accel_data['resp']['x']
+                y_g = accel_data['resp']['y']
+                z_g = accel_data['resp']['z']
+                
+                # Convert from g's to raw values (assuming 2G range, divider=16380)
+                # raw = (g_value * divider) / STANDARD_GRAVITY
+                STANDARD_GRAVITY = 9.806
+                divider = 16380  # Default 2G range
+                x_raw = int((x_g * STANDARD_GRAVITY) * divider / STANDARD_GRAVITY)
+                y_raw = int((y_g * STANDARD_GRAVITY) * divider / STANDARD_GRAVITY)
+                z_raw = int((z_g * STANDARD_GRAVITY) * divider / STANDARD_GRAVITY)
+                
+                # Pack as 3 signed 16-bit little-endian values
+                return struct.pack('<hhh', x_raw, y_raw, z_raw)
+            # Default to 0,0,1g if no data
+            return struct.pack('<hhh', 0, 0, 16380)
+        
+        # LIS3DH ADC registers (0x08-0x0D: ADC1_L, ADC1_H, ADC2_L, ADC2_H, ADC3_L, ADC3_H)
+        if address == 0x18 and (port & 0x7F) >= 0x08 and (port & 0x7F) <= 0x0D:
+            import emulator
+            import struct
+            # Get ADC voltage from GUI (in mV)
+            adc_data = emulator.send_command('adc', 'get_voltage')
+            if adc_data and 'resp' in adc_data:
+                voltage_mV = adc_data['resp']
+                # Convert mV back to raw ADC value
+                # From read_adc_mV: return 1800+(raw+32512)*(-900/65024)
+                # Solve for raw: raw = ((voltage_mV - 1800) * 65024 / -900) - 32512
+                raw_value = int(((voltage_mV - 1800) * 65024 / -900) - 32512)
+                return struct.pack('<h', raw_value)
+            # Default to ~1000mV
+            return struct.pack('<h', -10000)
+        
+        # PCA9535 I2C GPIO expander (button controller)
+        # Reads input port registers (0x00 = Port 0, 0x01 = Port 1)
+        if address == 0x20 and port in [0x00, 0x01]:
+            import emulator
+            # Get full 16-bit input state from emulator
+            full_state = emulator.send_command('pca9535', 'get_inputs')['resp']
+            # Return the appropriate byte based on port
+            if port == 0x00:
+                # Port 0 (lower 8 bits)
+                return bytes([full_state & 0xFF])
+            else:
+                # Port 1 (upper 8 bits)
+                return bytes([(full_state >> 8) & 0xFF])
+        
+        return bytes([0 for x in range(byte_amount)])
     
     def readfrom_mem_into(self, address, byte_amount, stop=True, addrsize=8):
         return [0 for x in range(byte_amount)]
@@ -109,3 +189,40 @@ class Timer:
 class ADC:
     def __init__(self, *args, **kwargs):
         pass
+
+class RTC:
+    def __init__(self):
+        pass
+    
+    def datetime(self, date_tuple=None):
+        if date_tuple is None:
+            # Return current time as (year, month, day, weekday, hours, minutes, seconds, subseconds)
+            import time
+            t = time.localtime()
+            return (t[0], t[1], t[2], t[6], t[3], t[4], t[5], 0)
+        else:
+            # Set time (not implemented in simulator)
+            pass
+
+def lightsleep(duration_ms=None):
+    """Simulate light sleep mode.
+    
+    Args:
+        duration_ms: Optional sleep duration in milliseconds.
+                     If None, sleeps indefinitely until woken by interrupt.
+    """
+    print(f"[MACHINE] Entering lightsleep (duration_ms={duration_ms})")
+    # In simulator, we just log the sleep event
+    # The actual wake-up would be triggered by GPIO interrupts or timeout
+    # For now, just return immediately to allow the simulator to continue
+    pass
+
+def deepsleep(duration_ms=None):
+    """Simulate deep sleep mode.
+    
+    Args:
+        duration_ms: Optional sleep duration in milliseconds.
+    """
+    print(f"[MACHINE] Entering deepsleep (duration_ms={duration_ms})")
+    # In simulator, just log the deep sleep event
+    pass

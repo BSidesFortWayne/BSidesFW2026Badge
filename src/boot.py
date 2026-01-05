@@ -8,6 +8,8 @@ import drivers.displays
 print('Showing boot screen..')
 displays = drivers.displays.Displays()
 
+SIMULATOR = False
+
 frequency = 240_000_000
 
 if machine.freq() != frequency:

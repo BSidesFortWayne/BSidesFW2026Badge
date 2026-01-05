@@ -13,8 +13,9 @@
   },
   "gui": {
     "window_title": "BSides FW 2025 Badge Simulator",
-    "show_fps": false,
-    "target_fps": 60
+    "show_fps": true,
+    "target_fps": 60,
+    "show_led_positions": true
   },
   "debug": {
     "verbose": false,

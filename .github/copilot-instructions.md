@@ -31,6 +31,12 @@ This is a **MicroPython firmware project** for an ESP32-based conference badge w
 
 ## Development Workflows
 
+### Simulator Development
+- **IMPORTANT**: When editing apps/drivers/lib files, **ONLY edit files in `src/`**, not `simulator/src/`
+- The simulator automatically copies `src/` to `simulator/src/` at startup
+- Changes to `simulator/src/` will be overwritten on next simulator run
+- After editing `src/`, restart the simulator to pick up changes
+
 ### On-device Development (Recommended)
 ```bash
 # Setup environment

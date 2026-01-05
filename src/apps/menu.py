@@ -78,6 +78,7 @@ class Menu(BaseApp):
 
         self.queue = queue.Queue(maxsize=10)
         self.index = 0
+        self.torn_down = False
 
     def put_queue_action(self, direction):
         try:
@@ -87,8 +88,13 @@ class Menu(BaseApp):
             self.queue.put_nowait(direction)
 
     async def teardown(self):
+        print("[DEBUG] Menu teardown called")
+        self.torn_down = True
         self.title_display.fill(gc9a01.BLACK)
         self.app_selection.fill(gc9a01.BLACK)
+        # Don't explicitly close font - let garbage collection handle it
+        # Closing here causes file descriptor reuse issues
+        self.font = None
 
 
     def menu_move_down(self):
@@ -115,6 +121,9 @@ class Menu(BaseApp):
                 asyncio.create_task(self.controller.switch_app(self.display_items[SELECTED_INDEX]))
 
     async def update(self):
+        if self.torn_down:
+            return
+            
         debug_mode = False
         x_offset = self.config['x_offset']
         y_offset = self.config['y_offset']

@@ -29,13 +29,18 @@ class BatteryMonitor(BaseApp):
         self.center = self.display1.width() // 2
 
     def draw_voltage_meter(self):
-        # print(f'{raw}raw, {mv}mv')
-        # self.raw_average.add(raw)
-
+        # Clear the framebuffer
         self.display2_fbuf.fill(gc9a01.BLACK)
 
+        # Get battery values
+        voltage_mv = self.controller.battery.mv_average.average()
+        battery_pct = self.controller.battery.get_battery_percentage()
+        
+        print(f"Battery values: {voltage_mv}mV, {battery_pct}%")
+
+        # Draw voltage text
         off_x, off_y = self.font.write(
-            f'Voltage: {self.controller.battery.mv_average.average()}mv',
+            f'Voltage: {voltage_mv:.1f}mv',
             self.display2_fbuf_mv,
             framebuf.RGB565,
             240,
@@ -45,21 +50,24 @@ class BatteryMonitor(BaseApp):
             gc9a01.WHITE
         )
 
+        # Draw battery percentage text
         off_x, off_y = self.font.write(
-            f'Battery: {self.controller.battery.get_battery_percentage()}%',
+            f'Battery: {battery_pct:.1f}%',
             self.display2_fbuf_mv,
             framebuf.RGB565,
             240,
             240,
             5,
-            120 - off_y,
+            120 - off_y - 5,
             gc9a01.WHITE
         )
 
     async def update(self):
         self.draw_voltage_meter()
-        self.controller.battery.draw_battery(self.controller.displays.display1, (120-15, 240-60))
-        self.controller.displays.display2.blit_buffer(self.display2_fbuf_mv, 0, 0, 240, 240)
+        # Draw battery icon on display1
+        self.controller.battery.draw_battery(self.controller.bsp.displays.display1, (120-15, 240-60))
+        # Blit the voltage meter to display2
+        self.controller.bsp.displays.display2.blit_buffer(self.display2_fbuf_mv, 0, 0, 240, 240)
 
 if __name__ == "__main__":
     from single_app_runner import run_app

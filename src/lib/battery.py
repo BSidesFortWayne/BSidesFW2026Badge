@@ -24,7 +24,7 @@ class Battery:
             self.battery_fbuf.hline(9, 3+y, 9, gc9a01.WHITE)
             self.battery_fbuf.rect(5+y, 5+y, 17-(y*2), 23-(y*2), gc9a01.WHITE, False)
 
-        self.mv_average = RollingAverage(100)
+        self.mv_average = RollingAverage(1)
         # self.raw_average = RollingAverage(100)
         # self.max_readings = 100
         # self.readings_mv = [0 for _ in range(self.max_readings)]
@@ -38,8 +38,13 @@ class Battery:
         self.controller.bsp.imu.adc_callbacks.append(self.adc_callback)
     
     async def adc_callback(self, value):
-        # print(f'adc_callback: {value}')
+        print(f"[Battery] ADC callback received: {value} (type: {type(value)})")
+        if not value:
+            print(f"[Battery] Value is falsy, returning")
+            return
+        print(f"[Battery] ADC callback adding {value}mV to rolling average")
         self.mv_average.add(value)
+        print(f"[Battery] Rolling average now: {self.mv_average.average()}mV")
         now = time.time()
         time_since_log = now - self.last_log_time
         if time_since_log > self.seconds_between_log:

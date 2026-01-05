@@ -134,7 +134,7 @@ def start_micropython(micropython_path: str, logger):
     
     try:
         process = subprocess.Popen(
-            [micropython_path, 'main.py'],
+            [micropython_path, '-X', 'heapsize=8M', 'main.py'],
             cwd='src',
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -198,28 +198,40 @@ def handle_communication(emulator_socket, gui_instance, micropython_process, log
     
     def receive_commands():
         """Thread to receive commands from MicroPython"""
+        buffer = b''
         while gui_instance.running:
             try:
-                # Receive data
-                data_bytes = emulator_conn.recv(1024)
-                if not data_bytes:
+                # Receive data in chunks
+                chunk = emulator_conn.recv(65536)  # Larger buffer for framebuffer data
+                if not chunk:
                     logger.log_warning('Connection closed by MicroPython')
                     break
                 
-                data = json.loads(data_bytes.decode('utf-8'))
+                buffer += chunk
                 
-                # Log command
-                logger.log_command(data)
-                
-                # Handle command
-                resp = gui_instance.handle_command(data)
-                
-                # Send response
-                data_to_send = {'status': 'ok', 'resp': resp}
-                emulator_conn.send(json.dumps(data_to_send).encode())
-                
-            except json.JSONDecodeError as e:
-                logger.log_error('protocol', f'Invalid JSON from MicroPython: {e}')
+                # Try to parse JSON - keep accumulating if incomplete
+                try:
+                    data = json.loads(buffer.decode('utf-8'))
+                    buffer = b''  # Clear buffer on successful parse
+                    
+                    # Log command
+                    logger.log_command(data)
+                    
+                    # Handle command
+                    resp = gui_instance.handle_command(data)
+                    
+                    # Send response
+                    data_to_send = {'status': 'ok', 'resp': resp}
+                    emulator_conn.send(json.dumps(data_to_send).encode())
+                    
+                except json.JSONDecodeError:
+                    # Incomplete JSON, continue accumulating
+                    # But check if buffer is getting too large
+                    if len(buffer) > 10 * 1024 * 1024:  # 10MB sanity limit
+                        logger.log_error('protocol', f'Buffer overflow: {len(buffer)} bytes')
+                        buffer = b''
+                    continue
+                    
             except BrokenPipeError:
                 logger.log_warning('Connection broken')
                 break

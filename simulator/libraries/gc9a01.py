@@ -17,7 +17,7 @@ def color565(r, g, b):
     return ((r >> 3) << 11) | ((g >> 2) << 5) | (b >> 3)
 
 class GC9A01:
-    def __init__(self, spi, width, height, reset, cs, dc, rotation, options, buffer_size):
+    def __init__(self, spi, width, height, reset, cs, dc, rotation, options=0, buffer_size=0):
         self._width = width
         self._height = height
         self.width = lambda: self._width
@@ -65,4 +65,25 @@ class GC9A01:
         return emulator.send_command('gc9a01', 'write_len', font=font.__name__, string=string)['resp']
 
     def jpg(self, filename, x, y, mode):
+        # Strip leading slash for simulator compatibility
+        if filename.startswith('/'):
+            filename = filename[1:]
         emulator.send_command('gc9a01', 'jpg', filename=filename, x=x, y=y, display=self.display)
+    
+    def blit_buffer(self, buffer, x, y, width, height):
+        # Convert memoryview/buffer to list for JSON serialization
+        # Buffer is in RGB565 format (16-bit per pixel)
+        if hasattr(buffer, 'tobytes'):
+            buffer_bytes = buffer.tobytes()
+        elif isinstance(buffer, (bytes, bytearray)):
+            buffer_bytes = bytes(buffer)
+        else:
+            buffer_bytes = bytes(buffer)
+        
+        # Convert to list of integers for JSON transmission
+        buffer_list = list(buffer_bytes)
+        emulator.send_command('gc9a01', 'blit_buffer', 
+                            buffer=buffer_list, 
+                            x=x, y=y, 
+                            width=width, height=height, 
+                            display=self.display)

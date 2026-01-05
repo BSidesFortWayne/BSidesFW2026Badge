@@ -59,7 +59,7 @@ class AnalogClock(BaseApp):
 
         self.rtc = RTC()
 
-        self.mem_buf = bytearray(240*240*3)
+        self.mem_buf = bytearray(240*240*2)  # RGB565 is 2 bytes per pixel
         self.fbuf = framebuf.FrameBuffer(
             self.mem_buf, 
             240, 
