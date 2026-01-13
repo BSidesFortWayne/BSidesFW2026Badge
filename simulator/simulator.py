@@ -19,6 +19,7 @@ import os
 import sys
 import threading
 import struct
+import hashlib
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -111,7 +112,10 @@ def validate_paths(project_path: str, micropython_path: str) -> Tuple[bool, str]
 
 
 def setup_project_directory(project_path: str):
-    """Copy project files and overlay simulator libraries"""
+    """Copy project files and overlay simulator libraries
+    
+    Uses smart caching to avoid re-copying unchanged files.
+    """
     print('Setting up project directory...')
     
     # Get simulator directory (where this script lives)
@@ -121,20 +125,52 @@ def setup_project_directory(project_path: str):
     src_dir = simulator_dir / 'src'
     libraries_dir = simulator_dir / 'libraries'
     project_path = Path(project_path).resolve()
+    cache_file = simulator_dir / '.src_cache.json'
     
     # Verify project path exists
     if not project_path.exists():
         raise FileNotFoundError(f'Project path does not exist: {project_path}')
     
-    # Clean old src directory
-    if src_dir.exists():
-        shutil.rmtree(src_dir)
+    # Check if we can use cached copy
+    use_cache = False
+    if src_dir.exists() and cache_file.exists():
+        try:
+            with open(cache_file, 'r') as f:
+                cache_data = json.load(f)
+            
+            # Verify cache is still valid
+            if cache_data.get('project_path') == str(project_path):
+                # Quick validation - check if key files exist and haven't changed
+                cached_mtime = cache_data.get('mtime', 0)
+                current_mtime = project_path.stat().st_mtime
+                
+                # If project directory hasn't been modified, use cache
+                if abs(current_mtime - cached_mtime) < 1.0:  # 1 second tolerance
+                    print('✓ Using cached project files (no changes detected)')
+                    use_cache = True
+        except (json.JSONDecodeError, KeyError, FileNotFoundError):
+            pass
     
-    # Copy project files
-    print(f'Copying project from {project_path}')
-    shutil.copytree(project_path, src_dir)
+    if not use_cache:
+        # Clean old src directory
+        if src_dir.exists():
+            print('Cleaning old project copy...')
+            shutil.rmtree(src_dir)
+        
+        # Copy project files
+        print(f'Copying project from {project_path}')
+        shutil.copytree(project_path, src_dir)
+        
+        # Save cache info
+        with open(cache_file, 'w') as f:
+            json.dump({
+                'project_path': str(project_path),
+                'mtime': project_path.stat().st_mtime
+            }, f)
+        
+        print('✓ Project files copied')
     
-    # Overlay simulator libraries (shims)
+    # Always overlay simulator libraries (shims) - these rarely change
     print(f'Overlaying simulator libraries from {libraries_dir}')
     shutil.copytree(libraries_dir, src_dir, dirs_exist_ok=True)
     

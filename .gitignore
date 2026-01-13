@@ -9,7 +9,9 @@ src/config/**/*.json
 app_directory_cache.json
 
 # Simulator auto-generated files
+simulator/src/
 simulator/src/_boot_then_main.py
+simulator/.src_cache.json
 
 # .bin firmware files
 *.bin

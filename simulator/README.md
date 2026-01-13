@@ -39,11 +39,20 @@ That's it! The simulator includes all features by default:
 
 ### Hardware Control Panel
 The right panel lets you mock hardware:
-- 🎮 Accelerometer (X/Y/Z axes + shake)
-- 🔋 Battery voltage slider
-- ⚡ Charge state control
-- 📡 WiFi state simulation
-- 🔵 Bluetooth state simulation
+- 🎮 **Accelerometer** (X/Y/Z axes + shake button)
+- 🔋 **Battery** voltage slider
+- ⚡ **Charge** state toggle
+- 📡 **WiFi** state simulation
+- 🔵 **Bluetooth** state simulation
+
+### Log Panel
+The bottom panel shows real-time logs:
+- 📝 Last 100 log messages
+- 🔵 **Blue**: INFO messages
+- 🟠 **Orange**: WARNING messages
+- 🔴 **Red**: ERROR messages
+- ⏱️ Timestamps on all entries
+- 👁️ Toggle visibility with "▼ Hide Log Panel" button
 
 ### Keyboard Controls
 
@@ -57,6 +66,14 @@ The right panel lets you mock hardware:
 | `7` | SW7 | Game button 1 |
 | `8` | SW8 | Game button 2 |
 | `9` | SW9 | Game button 3 |
+
+### Mouse Controls
+
+**Clickable Button Areas:**
+- Click directly on the badge button images to trigger presses
+- Semi-transparent circles show clickable areas
+- Buttons highlight **green** when pressed
+- Works alongside keyboard controls
 
 ## Requirements
 
@@ -161,9 +178,18 @@ Settings are stored in `config.json` (created by setup wizard):
 
 1. **Setup**: Copies `src/` to `simulator/src/`
 2. **Overlay**: Installs hardware shims (fake drivers)
-3. **Launch**: Starts MicroPython with your badge code
-4. **IPC**: Socket communication for commands
-5. **Render**: Pygame displays the badge screens
+3. **Boot Sequence**: Runs `boot.py` then `main.py` (matches hardware behavior)
+4. **Launch**: Starts MicroPython with your badge code
+5. **IPC**: Socket communication for commands
+6. **Render**: Pygame displays the badge screens
+
+### Boot Sequence
+
+The simulator replicates the **exact hardware boot sequence**:
+- Runs `boot.py` first (sets up displays, hardware)
+- Then runs `main.py` (starts controller and apps)
+- Variables from `boot.py` (like `displays`) are available in `main.py`
+- This matches real hardware behavior where boot.py runs on power-up
 
 ## Development Workflow
 
@@ -293,8 +319,10 @@ simulator/
 
 | Operation | Old (JSON) | New (Binary) | Speedup |
 |-----------|-----------|--------------|---------|
-| Full screen blit | ~100ms | ~5ms | **20x** |
-| Rectangle fill | ~2ms | ~0.3ms | **6x** |
+| [ARCHITECTURE.md](ARCHITECTURE.md) - Complete architecture, protocols, and design decisions
+- [BUTTON_MAPPING.md](BUTTON_MAPPING.md) - Hardware button reference
+- [REGRESSION_TEST_GUIDE.md](REGRESSION_TEST_GUIDE.md) - Automated testing guide
+- [SCREENSHOT_GUIDE.md](SCREENSHOT_GUIDE.md) - Screenshot tool usage
 | Single pixel | ~0.5ms | ~0.1ms | **5x** |
 
 **The binary protocol is essential for smooth animations.**
@@ -303,7 +331,40 @@ simulator/
 
 - `BUTTON_MAPPING.md` - Hardware button reference
 - `../docs/SIMULATOR_*.md` - Architecture docs
-- `logs/` - Runtime logs and debug output
+- `Advanced Features
+
+### Screenshot Capture
+
+Capture screenshots from the running simulator:
+
+```bash
+# Basic screenshot (badge displays only)
+python simulator/take_screenshot.py --output my_badge.png
+
+# Include control panel and log window
+python simulator/take_screenshot.py --output full_sim.png --include-controls
+```
+
+Screenshots are saved to the `screenshots/` directory by default.
+
+See [SCREENSHOT_GUIDE.md](SCREENSHOT_GUIDE.md) for more details.
+
+### Regression Testing
+
+Automated testing for badge apps:
+
+```bash
+# Run a regression test
+python simulator/regression_test.py demo_regression_test.py
+
+# Tests can:
+# - Navigate apps
+# - Trigger button sequences
+# - Capture screenshots
+# - Compare against baselines
+```
+
+See [REGRESSION_TEST_GUIDE.md](REGRESSION_TEST_GUIDE.md) for more details.
 
 ## FAQ
 
@@ -322,6 +383,11 @@ A: Yes, but use different ports for each:
 ./run.sh --port 4460 --binary-port 4461
 ```
 
+**Q: What if I don't have a config.json?**  
+A: The simulator will prompt you to run setup, or you can skip and use defaults.
+
+**Q: Why are my changes to `simulator/src/` not persisting?**  
+A: `simulator/src/` is auto-generated at startup. Always edit files in `../src/` instead
 **Q: What if I don't have a config.json?**  
 A: The simulator will prompt you to run setup, or you can skip and use defaults.
 

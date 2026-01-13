@@ -45,9 +45,9 @@ class GUIEnhanced:
         # Initialize pygame display with extra space for controls and log
         self.control_panel_width = 300
         self.log_panel_height = 250  # Height for log panel
-        self.log_panel_collapsed = False  # Start expanded
-        self.total_height = 1060 + self.log_panel_height
-        self.display = pygame.display.set_mode((560 + self.control_panel_width, self.total_height))
+        self.log_panel_collapsed = True  # Start collapsed
+        self.total_height = 1060 + self.log_panel_height  # Total height when log panel is shown
+        self.display = pygame.display.set_mode((560 + self.control_panel_width, 1060))  # Start with collapsed height
         pygame.display.set_caption(window_title)
         
         # Log buffer for display
@@ -333,7 +333,7 @@ class GUIEnhanced:
         # === Log Panel Toggle ===
         self.log_toggle_button = pygame_gui.elements.UIButton(
             relative_rect=pygame.Rect(panel_x, y_offset, 280, 35),
-            text='▼ Hide Log Panel',
+            text='Show Log Panel',
             manager=self.ui_manager
         )
     
@@ -844,12 +844,12 @@ class GUIEnhanced:
                         # Toggle log panel
                         self.log_panel_collapsed = not self.log_panel_collapsed
                         if self.log_panel_collapsed:
-                            self.log_toggle_button.set_text('▶ Show Log Panel')
+                            self.log_toggle_button.set_text('Show Log Panel')
                             # Resize window to hide log panel
                             self.display = pygame.display.set_mode((560 + self.control_panel_width, 1060))
                             self.ui_manager.set_window_resolution((560 + self.control_panel_width, 1060))
                         else:
-                            self.log_toggle_button.set_text('▼ Hide Log Panel')
+                            self.log_toggle_button.set_text('Hide Log Panel')
                             # Resize window to show log panel
                             self.display = pygame.display.set_mode((560 + self.control_panel_width, self.total_height))
                             self.ui_manager.set_window_resolution((560 + self.control_panel_width, self.total_height))
