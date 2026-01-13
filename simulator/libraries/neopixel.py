@@ -16,7 +16,7 @@ class NeoPixel:
         return self.number_of_leds
     
     def write(self):
-        emulator.send_command('neopixel', 'write', leds=self.leds)
+        emulator.send_neopixel_write(self.leds)
 
     def fill(self, color):
         self.leds = [color for x in range(self.number_of_leds)]

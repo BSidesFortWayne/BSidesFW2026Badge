@@ -1,5 +1,6 @@
 # Simulator
 - [ ] Map buttons to more keyboard keys
+- [ ] Map on-screen clicks on buttons to button commands
 - [ ] Investigate rendering performance issue (especially tearing with button tester)
 - [ ] 
 

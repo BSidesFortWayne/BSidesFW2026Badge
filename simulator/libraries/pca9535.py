@@ -7,4 +7,4 @@ class PCA9535:
         pass
 
     def read_all_pca9535_inputs(self):
-        return emulator.send_command('pca9535', 'get_inputs')['resp']
+        return emulator.send_get_inputs()

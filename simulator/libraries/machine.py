@@ -8,19 +8,26 @@ _interrupt_poll_enabled = True
 
 def _interrupt_poll_thread():
     """Background thread that polls for interrupts and dispatches them."""
+    # Give the main app time to connect to binary server
+    time.sleep(0.5)
+    
     while _interrupt_poll_enabled:
         try:
             # Poll for pending interrupts from GUI
             interrupts = emulator.poll_interrupts()
-            for interrupt in interrupts:
-                pin_num = interrupt['pin']
-                # Dispatch to the registered pin handler
-                if pin_num in Pin._pin_registry:
-                    # Use micropython.schedule for thread-safe callback
-                    pin_obj = Pin._pin_registry[pin_num]
-                    micropython.schedule(_dispatch_interrupt, (pin_obj, interrupt['edge']))
+            if interrupts:  # Only process if we got valid data
+                for interrupt in interrupts:
+                    pin_num = interrupt['pin']
+                    # Dispatch to the registered pin handler
+                    if pin_num in Pin._pin_registry:
+                        # Use micropython.schedule for thread-safe callback
+                        pin_obj = Pin._pin_registry[pin_num]
+                        micropython.schedule(_dispatch_interrupt, (pin_obj, interrupt['edge']))
         except Exception as e:
-            print(f"Error in interrupt poll thread: {e}")
+            # Only print error once per connection issue, then be silent
+            if not hasattr(_interrupt_poll_thread, '_error_printed'):
+                print(f"[MP] Error in interrupt poll thread: {e}")
+                _interrupt_poll_thread._error_printed = True
         time.sleep(0.05)  # Poll at 20Hz
 
 def _dispatch_interrupt(args):
@@ -67,14 +74,11 @@ class Pin:
         if state == None:
             # Read state from emulator for input pins
             if self.mode == Pin.IN:
-                result = emulator.send_command('pin', 'value', pin=self.pin, value=self._value)
-                if 'resp' in result:
-                    return result['resp']
+                return emulator.send_pin_value(self.pin)
             return self._value
         else:
             old_value = self._value
             self._value = state
-            emulator.send_command('pin', 'value', pin=self.pin, value=self._value)
             
             # Check if we should trigger interrupts
             if old_value != state:
@@ -113,11 +117,9 @@ class Pin:
     
     def on(self):
         self._value = 1
-        emulator.send_command('pin', 'value', pin=self.pin, value=self._value)
     
     def off(self):
         self._value = 0
-        emulator.send_command('pin', 'value', pin=self.pin, value=self._value)
 
     def irq(self, handler=None, trigger=None):
         if handler is None:
@@ -140,19 +142,16 @@ class PWM:
         if value is None:
             return self._duty
         self._duty = value
-        emulator.send_command('pwm', 'duty', value=value)
     
     def duty_u16(self, value=None):
         if value is None:
             return self._duty_u16
         self._duty_u16 = value
-        emulator.send_command('pwm', 'duty_u16', value=value)
     
     def freq(self, value=None):
         if value is None:
             return self._freq
         self._freq = value
-        emulator.send_command('pwm', 'freq', value=value)
 
 class I2C:
     def __init__(self, *args, **kwargs):
@@ -227,8 +226,8 @@ class I2C:
         # Reads input port registers (0x00 = Port 0, 0x01 = Port 1)
         if address == 0x20 and port in [0x00, 0x01]:
             import emulator
-            # Get full 16-bit input state from emulator
-            full_state = emulator.send_command('pca9535', 'get_inputs')['resp']
+            # Get full 16-bit input state from emulator via binary protocol
+            full_state = emulator.send_get_inputs()
             # Return the appropriate byte based on port
             if port == 0x00:
                 # Port 0 (lower 8 bits)
@@ -249,10 +248,11 @@ class I2C:
         return len(buffer)
 
     def writevto(self, address, vector, stop=True):
-        return len(buffer)
+        total_len = sum(len(v) for v in vector)
+        return total_len
     
-    def write(self, buffer):
-        return len(buffer)
+    def write(self, buf):
+        return len(buf)
 
 class SPI:
     def __init__(self, *args, **kwargs):
@@ -311,4 +311,18 @@ def deepsleep(duration_ms=None):
     """
     print(f"[MACHINE] Entering deepsleep (duration_ms={duration_ms})")
     # In simulator, just log the deep sleep event
+    pass
+
+def freq(value=None):
+    """Get or set CPU frequency.
+    
+    Args:
+        value: Optional frequency in Hz. If None, returns current frequency.
+        
+    Returns:
+        Current CPU frequency in Hz (always 240MHz in simulator).
+    """
+    if value is None:
+        return 240_000_000  # Simulate 240MHz ESP32
+    # Setting frequency in simulator is a no-op
     pass

@@ -1,5 +1,4 @@
 import machine
-import json
 import emulator
 
 FAST = 0
@@ -29,31 +28,31 @@ class GC9A01:
             self.display = 2
  
     def init(self):
-        emulator.send_command('gc9a01', 'init', display=self.display)
+        pass  # No init needed for binary protocol
     
     def fill(self, color):
-        emulator.send_command('gc9a01', 'fill', color=color, display=self.display)
+        emulator.send_fill(self.display, color)
     
     def off(self):
-        emulator.send_command('gc9a01', 'off', display=self.display)
+        pass  # Not implemented in binary protocol
     
     def on(self):
-        emulator.send_command('gc9a01', 'on', display=self.display)
+        pass  # Not implemented in binary protocol
 
     def pixel(self, x, y, color):
-        emulator.send_command('gc9a01', 'pixel', x=x, y=y, color=color, display=self.display)
+        emulator.send_pixel(self.display, x, y, color)
     
     def circle(self, x, y, r, color):
-        emulator.send_command('gc9a01', 'circle', x=x, y=y, r=r, color=color, display=self.display)
+        emulator.send_circle(self.display, x, y, r, color, filled=False)
     
     def fill_circle(self, x, y, r, color):
-        emulator.send_command('gc9a01', 'fill_circle', x=x, y=y, r=r, color=color, display=self.display)
+        emulator.send_circle(self.display, x, y, r, color, filled=True)
     
     def fill_rect(self, x, y, w, h, color):
-        emulator.send_command('gc9a01', 'fill_rect', x=x, y=y, w=w, h=h, color=color, display=self.display)
+        emulator.send_fill_rect(self.display, x, y, w, h, color)
     
     def line(self, x0, y0, x1, y1, color):
-        emulator.send_command('gc9a01', 'line', x0=x0, y0=y0, x1=x1, y1=y1, color=color, display=self.display)
+        emulator.send_line(self.display, x0, y0, x1, y1, color)
     
     def write(self, font, string, x, y, fg_color, bg_color):
         emulator.send_command('gc9a01', 'write', font=font.__name__, string=string, x=x, y=y, fg_color=fg_color, bg_color=bg_color, display=self.display)
@@ -71,19 +70,5 @@ class GC9A01:
         emulator.send_command('gc9a01', 'jpg', filename=filename, x=x, y=y, display=self.display)
     
     def blit_buffer(self, buffer, x, y, width, height):
-        # Convert memoryview/buffer to list for JSON serialization
-        # Buffer is in RGB565 format (16-bit per pixel)
-        if hasattr(buffer, 'tobytes'):
-            buffer_bytes = buffer.tobytes()
-        elif isinstance(buffer, (bytes, bytearray)):
-            buffer_bytes = bytes(buffer)
-        else:
-            buffer_bytes = bytes(buffer)
-        
-        # Convert to list of integers for JSON transmission
-        buffer_list = list(buffer_bytes)
-        emulator.send_command('gc9a01', 'blit_buffer', 
-                            buffer=buffer_list, 
-                            x=x, y=y, 
-                            width=width, height=height, 
-                            display=self.display)
+        """OPTIMIZED: Direct binary transfer of framebuffer"""
+        emulator.send_blit_buffer(self.display, buffer, x, y, width, height)

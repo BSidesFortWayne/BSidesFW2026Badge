@@ -37,6 +37,25 @@ This is a **MicroPython firmware project** for an ESP32-based conference badge w
 - Changes to `simulator/src/` will be overwritten on next simulator run
 - After editing `src/`, restart the simulator to pick up changes
 
+**Running the Simulator:**
+```bash
+# First time setup
+cd simulator/
+uv run ./run.sh --setup
+
+# Daily use
+uv run ./run.sh
+
+# With options
+uv run ./run.sh -p ../src -v
+```
+
+**Features (always enabled):**
+- Binary protocol (10-20x faster rendering)
+- Hardware control panel (mock sensors)
+- Dual circular displays
+- Full button emulation
+
 ### On-device Development (Recommended)
 ```bash
 # Setup environment

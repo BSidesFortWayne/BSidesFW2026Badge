@@ -1,5 +1,26 @@
 # BSides FW 2025 Badge Simulator - Documentation Index
 
+## 🎉 NEW: Unified Simulator Available!
+
+The simulator has been unified into a single implementation with all features enabled by default!
+
+**Quick Start:**
+```bash
+cd simulator/
+uv run ./run.sh --setup     # First-time setup wizard
+uv run ./run.sh             # Run with all features enabled
+```
+
+**Features (all included):**
+- ⚡ Binary protocol (10-20x faster)
+- 🎮 Hardware control panel
+- 📺 Dual circular displays  
+- 🎹 Full button emulation
+
+**See:** `simulator/README.md` for complete documentation and `simulator/MIGRATION_GUIDE.md` if upgrading from old versions.
+
+---
+
 ## Overview
 
 This directory contains comprehensive documentation for understanding, updating, and using the BSides FW 2025 Badge simulator. The simulator provides a local development environment for testing badge applications without physical hardware.

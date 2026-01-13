@@ -3,6 +3,9 @@
   "micropython_path": "micropython",
   "socket_port": 4455,
   "socket_host": "127.0.0.1",
+  "binary_protocol": true,
+  "binary_port": 4456,
+  "enhanced_gui": true,
   "logging": {
     "enabled": true,
     "output_dir": "logs",
