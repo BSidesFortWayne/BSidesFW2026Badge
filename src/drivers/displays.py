@@ -53,7 +53,9 @@ class Displays(Driver):
 
         spi_freq = spi_freq or machine.freq() // 2
         print(f"SPI Frequency: {spi_freq}")
-        spi = SPI(1, baudrate=spi_freq, sck=Pin(self.SCK), mosi=Pin(self.MOSI))
+        # SPI(2) = VSPI on original ESP32; pins SCK=18, MOSI=23 are VSPI's IOMUX pins.
+        # SPI(1) = HSPI, which would route through the GPIO matrix (capped at 26.7 MHz full-duplex).
+        spi = SPI(2, baudrate=spi_freq, sck=Pin(self.SCK), mosi=Pin(self.MOSI))
 
         # TODO move to smart config?
         USE_PY_DRIVER = False
