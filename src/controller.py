@@ -110,6 +110,31 @@ class Controller(IController):
         self.app_directory = AppDirectory()
         self.current_view: apps.app.BaseApp | None = None
 
+        try:
+            name_file = open('name.json')
+            self.name = json.loads(name_file.read())
+            name_file.close()
+        except Exception:
+           print("Name file not found")
+           self.name = {
+               'first': "Bilbo",
+               'last': "Baggins",
+                'background_image': [
+                    'img/bsides_logo.jpg',
+                    'img/bsides_logo.jpg'
+                ],
+                'fg_color': [
+                    '#FFFFFF',
+                    '#FFFFFF'
+                ],
+                'bg_color': [
+                    '#000000',
+                    '#000000'
+                ],
+                'company': 'Company',
+                'title': 'Title'
+           }
+        
         print('Bluetooth callbacks')
         self.bsp.bluetooth.ble_callbacks.append(self.update_time)
         self.bsp.bluetooth.ble_callbacks.append(self.lights)
