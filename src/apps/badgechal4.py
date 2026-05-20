@@ -12,28 +12,6 @@ RED = 0xF800
 GREEN = 0x07E0
 
 DIGITS = "0123456789"
-MORSE_DIGITS = {
-    "0": "-----",
-    "1": ".----",
-    "2": "..---",
-    "3": "...--",
-    "4": "....-",
-    "5": ".....",
-    "6": "-....",
-    "7": "--...",
-    "8": "---..",
-    "9": "----.",
-}
-
-# Morse timing (in ms)
-MORSE_UNIT_MS = 90
-MORSE_DOT_MS = MORSE_UNIT_MS
-MORSE_DASH_MS = MORSE_UNIT_MS * 3
-MORSE_PART_GAP_MS = MORSE_UNIT_MS
-MORSE_CHAR_GAP_MS = MORSE_UNIT_MS * 6
-MORSE_WORD_GAP_MS = MORSE_UNIT_MS * 7
-MORSE_FREQ = 720
-MORSE_DUTY = 26
 
 
 class App(BaseApp):
@@ -42,44 +20,12 @@ class App(BaseApp):
 
     def __init__(self, controller):
         super().__init__(controller)
-        self.sequence = str(badgechal.dtmf_sequence())  # digits players must decode
-        self.answer = ["0"] * len(self.sequence)
+        self.answer = ["0"] * int(badgechal.c4_expected_len())
         self.cursor = 0
         self.playing = False
         self.replay_task = None
         self.input_dirty = False
         self.accept_input_at_ms = 0
-
-    def _tone(self, duration_ms, led_idx=None):
-        pwm = self.controller.bsp.speaker.pwm
-        leds = self.controller.bsp.leds
-        if led_idx is not None:
-            leds.turn_off_all()
-            leds.set_led_color(led_idx, (0, 0, 28))
-        pwm.freq(MORSE_FREQ)
-        pwm.duty(MORSE_DUTY)
-        time.sleep_ms(duration_ms)
-        pwm.duty(0)
-        if led_idx is not None:
-            leds.turn_off_all()
-
-    def _play_morse_char(self, ch, led_idx):
-        if ch == " ":
-            time.sleep_ms(MORSE_WORD_GAP_MS)
-            return
-
-        pattern = MORSE_DIGITS.get(ch)
-        if pattern is None:
-            return
-
-        for i, mark in enumerate(pattern):
-            if mark == ".":
-                self._tone(MORSE_DOT_MS, led_idx)
-            else:
-                self._tone(MORSE_DASH_MS, led_idx)
-            if i < len(pattern) - 1:
-                time.sleep_ms(MORSE_PART_GAP_MS)
-        time.sleep_ms(MORSE_CHAR_GAP_MS)
 
     async def _play_sequence(self):
         displays = self.controller.bsp.displays
@@ -91,10 +37,7 @@ class App(BaseApp):
         leds = self.controller.bsp.leds
         self.playing = True
         try:
-            leds.turn_off_all()
-            for idx, ch in enumerate(self.sequence):
-                self._play_morse_char(ch, idx % 7)
-                leds.turn_off_all()
+            badgechal.c4_play(self.controller.bsp.speaker.pwm, leds)
         finally:
             self.playing = False
             self.controller.bsp.speaker.pwm.duty(0)
@@ -131,8 +74,12 @@ class App(BaseApp):
 
     async def _submit(self):
         candidate = "".join(self.answer)
-        passed, flag = badgechal.dtmf_check(candidate)
-        if passed and flag:
+        passed = bool(badgechal.dtmf_check(candidate))
+        if passed:
+            flag = badgechal.claim_flag(4)
+            if not flag:
+                await self._flash("VERIFY FAIL", RED)
+                return
             await self._flash("CORRECT", GREEN)
             display_flag("C4 Morse Codec", flag, self.controller.bsp.displays)
             return

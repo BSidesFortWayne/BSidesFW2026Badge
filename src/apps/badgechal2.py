@@ -20,12 +20,15 @@ class App(BaseApp):
 
     def __init__(self, controller):
         super().__init__(controller)
-        self.bits = str(badgechal.pixel_cipher_bits()).split("|")
+        bit_cols = int(badgechal.pixel_cipher_len())
+        self.bits = []
+        for col in range(bit_cols):
+            col_bits = "".join(str(int(badgechal.pixel_cipher_bit(col, row))) for row in range(7))
+            self.bits.append(col_bits)
         self.length = len(self.bits)
         self.answer = ["A"] * self.length
         self.cursor = 0
         self.show_input = False
-        self.status = ""
 
     def _render_bits(self):
         displays = self.controller.bsp.displays
@@ -91,10 +94,14 @@ class App(BaseApp):
 
     async def _submit(self):
         candidate = "".join(self.answer)
-        passed, flag = badgechal.pixel_cipher_check(candidate)
-        if passed and flag:
+        passed = bool(badgechal.pixel_cipher_check(candidate))
+        if passed:
+            flag = badgechal.claim_flag(2)
+            if not flag:
+                await self._flash_status("VERIFY FAIL", RED)
+                return
             await self._flash_status("CORRECT", GREEN)
-            display_flag("A3 Pixel Cipher", flag, self.controller.bsp.displays)
+            display_flag("C2 Pixel Cipher", flag, self.controller.bsp.displays)
             return
         await self._flash_status("TRY AGAIN", RED)
 

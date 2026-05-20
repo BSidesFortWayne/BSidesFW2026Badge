@@ -6,14 +6,12 @@ from apps.app import BaseApp
 from lib.flag_display import display_flag
 
 
-# RGB565 backgrounds
-RED_BG    = 0xF800   # gc9a01.RED   — lose
-GREEN_BG  = 0x07E0   # gc9a01.GREEN — win
-BLACK_BG  = 0x0000
-WHITE_FG  = 0xFFFF
+RED_BG = 0xF800
+GREEN_BG = 0x07E0
+BLACK_BG = 0x0000
+WHITE_FG = 0xFFFF
 
-# Failure codes from badgechal.f1_start.
-F1_FAIL_TIMEOUT    = -1
+F1_FAIL_TIMEOUT = -1
 F1_FAIL_JUMP_START = -2
 
 
@@ -30,23 +28,17 @@ class App(BaseApp):
         displays = self.controller.bsp.displays
         leds = self.controller.bsp.leds
 
-        # Intro screen
         _fill_both(displays, BLACK_BG)
         displays.display_center_text("F1 Start", fg=WHITE_FG, bg=BLACK_BG, display_index=1)
         displays.display_center_text("Press SEL", fg=WHITE_FG, bg=BLACK_BG, display_index=2)
         await asyncio.sleep_ms(1200)
 
         while True:
-            # Pre-game screen — C takes over from here.
             _fill_both(displays, BLACK_BG)
             displays.display_center_text("Watch LEDs", fg=WHITE_FG, bg=BLACK_BG, display_index=1)
             displays.display_center_text("Press at GO", fg=WHITE_FG, bg=BLACK_BG, display_index=2)
             await asyncio.sleep_ms(400)
 
-            # The entire game runs in C: LED countdown + random delay +
-            # press window + timing validation. C drives the LEDs through
-            # the leds object and flashes display 1 yellow at lights-out.
-            # SEL is read via direct I2C inside C (no Python interception).
             passed, elapsed_us = badgechal.f1_start(leds, displays)
             elapsed_ms = elapsed_us // 1000 if elapsed_us >= 0 else elapsed_us
 
@@ -67,7 +59,6 @@ class App(BaseApp):
                 display_flag("F1 Start Light", flag, displays)
                 return
 
-            # Map the C-returned failure to a human-readable reason.
             if elapsed_us == F1_FAIL_TIMEOUT:
                 reason = "TIMEOUT"
                 shown_ms = 0

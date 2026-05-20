@@ -129,8 +129,13 @@ class App(BaseApp):
                 continue
 
             if self.progress >= len(self.sequence):
-                passed, flag = badgechal.combo_check(self.sequence)
-                if passed and flag:
+                passed = bool(badgechal.combo_check(self.sequence))
+                if passed:
+                    flag = badgechal.claim_flag(3)
+                    if not flag:
+                        await self._wrong()
+                        await asyncio.sleep_ms(60)
+                        continue
                     self.controller.bsp.displays.display1.fill(GREEN)
                     self.controller.bsp.displays.display2.fill(GREEN)
                     self.controller.bsp.displays.display_center_text("UNLOCKED", fg=WHITE, bg=GREEN, display_index=1)
