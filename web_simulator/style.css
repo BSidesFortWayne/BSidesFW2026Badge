@@ -135,7 +135,7 @@ html, body {
     flex: 1;
     display: flex;
     flex-direction: column;
-    min-width: 280px;
+    min-width: 440px;
     height: 100vh;
     border-left: 1px solid #333;
     overflow: hidden;
@@ -320,3 +320,300 @@ html, body {
 .log-entry.error { color: #ff6464; }
 .log-entry.warning { color: #ffc864; }
 .log-entry.info { color: #96c8ff; }
+
+/* ── Editor Panel ── */
+#editor-panel {
+    flex: 0 0 420px;
+    background: #1e1e1e;
+    border-top: 1px solid #444;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    min-height: 32px;
+    overflow: hidden;
+}
+
+#editor-panel.collapsed {
+    flex: 0 0 32px;
+}
+
+#editor-panel.collapsed #editor-host,
+#editor-panel.collapsed #editor-file,
+#editor-panel.collapsed .editor-actions > button:not(#editor-toggle) {
+    display: none;
+}
+
+#editor-resize-handle {
+    height: 4px;
+    cursor: ns-resize;
+    background: transparent;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+}
+
+#editor-resize-handle:hover {
+    background: #4af;
+}
+
+#editor-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    background: #252525;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+    height: 32px;
+}
+
+#editor-header > span:first-child {
+    font-weight: bold;
+    font-size: 12px;
+    color: #aaa;
+    flex-shrink: 0;
+}
+
+#editor-dirty {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: transparent;
+    flex-shrink: 0;
+    transition: background 0.15s;
+}
+
+#editor-dirty.active {
+    background: #fc4;
+    box-shadow: 0 0 4px #fc4;
+}
+
+#editor-active-path {
+    flex: 1;
+    min-width: 0;
+    padding: 3px 5px;
+    color: #8af;
+    font-size: 11px;
+    font-family: 'Consolas', monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.editor-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.editor-actions button {
+    background: #333;
+    color: #ccc;
+    border: 1px solid #555;
+    padding: 2px 8px;
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 11px;
+}
+.editor-actions button:hover { background: #444; }
+.editor-actions button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+#editor-reload {
+    background: #2d4a2d !important;
+    border-color: #4a7a4a !important;
+    color: #cfc !important;
+}
+#editor-reload:hover { background: #3d5a3d !important; }
+
+#editor-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    overflow: hidden;
+}
+
+#editor-sidebar {
+    flex: 0 0 220px;
+    min-width: 120px;
+    max-width: 60%;
+    display: flex;
+    flex-direction: column;
+    background: #1a1a1a;
+    border-right: 1px solid #333;
+    overflow: hidden;
+}
+
+#editor-sidebar-toolbar {
+    display: flex;
+    gap: 3px;
+    padding: 3px;
+    background: #252525;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+}
+
+#editor-sidebar-toolbar button {
+    flex: 1;
+    background: #333;
+    color: #ccc;
+    border: 1px solid #555;
+    padding: 2px 4px;
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+#editor-sidebar-toolbar button:hover { background: #444; }
+
+#editor-sidebar-toolbar #editor-collapse-all {
+    flex: 0 0 28px;
+}
+
+#editor-sidebar-resize {
+    flex: 0 0 4px;
+    cursor: ew-resize;
+    background: transparent;
+}
+
+#editor-sidebar-resize:hover {
+    background: #4af;
+}
+
+#editor-tree {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 2px 0;
+    font-family: 'Consolas', monospace;
+    font-size: 12px;
+    user-select: none;
+}
+
+.tree-row {
+    display: flex;
+    align-items: center;
+    height: 20px;
+    padding-right: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+    color: #ccc;
+    position: relative;
+}
+
+.tree-row:hover {
+    background: #2a2a2a;
+}
+
+.tree-row.is-active {
+    background: #1e3a5f;
+    color: #fff;
+}
+
+.tree-row.is-selected:not(.is-active) {
+    background: #303030;
+}
+
+.tree-row.is-drop-target {
+    background: #2a4a2a !important;
+    outline: 1px dashed #6c6;
+    outline-offset: -1px;
+}
+
+.tree-row.is-dirty .tree-label::after {
+    content: ' \25CF';
+    color: #fc4;
+}
+
+.tree-row.is-created .tree-label {
+    color: #9c9;
+}
+
+.tree-row.is-edited .tree-label {
+    color: #fc8;
+}
+
+.tree-indent {
+    flex-shrink: 0;
+    display: inline-block;
+}
+
+.tree-caret {
+    flex-shrink: 0;
+    width: 14px;
+    text-align: center;
+    font-size: 10px;
+    color: #888;
+}
+
+.tree-icon {
+    flex-shrink: 0;
+    width: 14px;
+    text-align: center;
+    font-size: 11px;
+    color: #888;
+    margin-right: 3px;
+}
+
+.tree-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tree-actions {
+    display: none;
+    gap: 2px;
+    flex-shrink: 0;
+    margin-left: 4px;
+}
+
+.tree-row:hover .tree-actions {
+    display: inline-flex;
+}
+
+.tree-actions button {
+    background: transparent;
+    border: none;
+    color: #aaa;
+    cursor: pointer;
+    padding: 1px 4px;
+    font-size: 11px;
+    border-radius: 2px;
+}
+
+.tree-actions button:hover {
+    background: #444;
+    color: #fff;
+}
+
+.tree-actions button.danger:hover {
+    background: #722;
+    color: #fff;
+}
+
+.tree-rename-input {
+    flex: 1;
+    background: #222;
+    color: #fff;
+    border: 1px solid #4af;
+    border-radius: 2px;
+    padding: 1px 3px;
+    font-family: inherit;
+    font-size: inherit;
+    outline: none;
+}
+
+#editor-host {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+}

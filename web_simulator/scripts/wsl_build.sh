@@ -119,6 +119,26 @@ for root, dirs, filenames in os.walk(assets_dir):
 print(json.dumps({'files': sorted(files)}, indent=2))
 " > "$BUILD_OUT/manifest.json"
 
+# Mirror the src/ tree for the in-browser editor (fetched via HTTP, not MEMFS).
+echo "=== Mirroring src/ for editor ==="
+SRC_MIRROR="$BUILD_OUT/src"
+rm -rf "$SRC_MIRROR"
+mkdir -p "$SRC_MIRROR"
+cp -r "$PROJECT_DIR/src/." "$SRC_MIRROR/"
+
+python3 -c "
+import os, json
+mirror = '$SRC_MIRROR'
+files = []
+for root, dirs, filenames in os.walk(mirror):
+    for f in filenames:
+        if f.endswith('.py'):
+            full = os.path.join(root, f)
+            rel = os.path.relpath(full, mirror).replace(os.sep, '/')
+            files.append(rel)
+print(json.dumps({'files': sorted(files)}, indent=2))
+" > "$BUILD_OUT/src_index.json"
+
 echo ""
 echo "=== Build Complete ==="
 ls -lh "$BUILD_OUT/micropython.wasm" "$BUILD_OUT/micropython.mjs"

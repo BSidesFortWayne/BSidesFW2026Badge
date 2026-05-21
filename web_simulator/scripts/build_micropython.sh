@@ -113,6 +113,28 @@ for root, dirs, filenames in os.walk('$ASSETS_DIR'):
 print(json.dumps({'files': sorted(files)}, indent=2))
 " > "$BUILD_DIR/manifest.json"
 
+# Ship the src/ tree to the browser for the in-browser editor.
+# These files are not loaded into MEMFS — they're fetched on demand
+# by the editor (js/editor.js) so users can view/edit any source file.
+echo "  Packaging src/ tree for in-browser editor..."
+SRC_MIRROR="$BUILD_DIR/src"
+rm -rf "$SRC_MIRROR"
+mkdir -p "$SRC_MIRROR"
+cp -r "$PROJECT_DIR/src/." "$SRC_MIRROR/"
+
+# Generate src_index.json — list of every .py file (relative to src/)
+python3 -c "
+import os, json
+files = []
+for root, dirs, filenames in os.walk('$SRC_MIRROR'):
+    for f in filenames:
+        if f.endswith('.py'):
+            full = os.path.join(root, f)
+            rel = os.path.relpath(full, '$SRC_MIRROR').replace(os.sep, '/')
+            files.append(rel)
+print(json.dumps({'files': sorted(files)}, indent=2))
+" > "$BUILD_DIR/src_index.json"
+
 echo ""
 echo "=== Build Complete ==="
 echo "Output files:"

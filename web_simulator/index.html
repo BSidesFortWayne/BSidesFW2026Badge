@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BSides FW 2025 Badge Simulator</title>
-    <link rel="stylesheet" href="style.css?v=9">
+    <link rel="stylesheet" href="style.css?v=14">
 </head>
 <body>
     <div id="app">
@@ -115,6 +115,34 @@
                 </div>
             </div>
 
+            <div id="editor-panel" class="collapsed">
+                <div id="editor-resize-handle"></div>
+                <div id="editor-header">
+                    <span>Code Editor</span>
+                    <span id="editor-dirty" title="No unsaved changes"></span>
+                    <span id="editor-active-path" title="Active file"></span>
+                    <div class="editor-actions">
+                        <button id="editor-reload" title="Hot-swap current app">Reload App</button>
+                        <button id="editor-full-reload" title="Full page reload">Full Reload</button>
+                        <button id="editor-download" title="Download edited file">Download</button>
+                        <button id="editor-revert" title="Discard edits for this file">Revert</button>
+                        <button id="editor-toggle">Expand</button>
+                    </div>
+                </div>
+                <div id="editor-body">
+                    <div id="editor-sidebar">
+                        <div id="editor-sidebar-toolbar">
+                            <button id="editor-new-file" title="New file (use slashes for subfolders)">+ File</button>
+                            <button id="editor-new-folder" title="New folder">+ Folder</button>
+                            <button id="editor-collapse-all" title="Collapse all folders">⌄</button>
+                        </div>
+                        <div id="editor-tree"></div>
+                    </div>
+                    <div id="editor-sidebar-resize"></div>
+                    <div id="editor-host"></div>
+                </div>
+            </div>
+
             <div id="log-panel">
                 <div id="log-resize-handle"></div>
                 <div id="log-header">
@@ -129,6 +157,6 @@
         </div>
     </div>
 
-    <script type="module" src="js/main.js?v=9"></script>
+    <script type="module" src="js/main.js?v=14"></script>
 </body>
 </html>

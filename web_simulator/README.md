@@ -79,6 +79,40 @@ Browser
 
 Buttons can also be clicked directly on the badge image. Touch is supported on mobile.
 
+## Editing code in the simulator
+
+The right-side **Code Editor** panel (Monaco) lets you live-edit any file in
+`src/` and re-run it without rebuilding the WASM binary.
+
+- **File picker** lists every `.py` under `src/` (grouped by top-level dir).
+- **Reload App** hot-swaps the module: the running app is torn down, the
+  edited module is re-`exec()`'d into a fresh module object, and the app is
+  restarted via `Controller.switch_app`. Controller state, services, logs,
+  and LED state are preserved.
+- **Full Reload** is just `window.location.reload()` — use it when you've
+  edited `controller.py`, `bsp.py`, a service, or anything held by a
+  long-lived object. The page reloads against the same (frozen) WASM, so
+  for *permanent* changes you still need to re-run `build_micropython.sh`.
+- **Download** saves the currently active file (with your edits) to disk.
+  Filename mirrors the source path: `apps/menu.py` → `apps_menu.py`.
+- **Revert** drops your edits for the active file and re-loads it from disk.
+- All edits live in `localStorage` (`badge_sim_edit:<path>` keys). They
+  persist across page reloads. Nothing is written back to your real `src/`
+  files — use **Download** to export changes.
+
+**Trade-offs of hot-swap:**
+
+Hot-swap re-executes the edited module, but already-imported callers still
+hold references to the *old* classes. For app files that's fine —
+`switch_app` constructs a fresh instance from the new class. For `ui/`,
+`lib/`, or `drivers/` modules, the running app re-imports them at
+construction time, so most shallow changes pick up after Reload App. For
+anything deeper (a class held by a service, a module imported only by
+`controller.py`), use **Full Reload**.
+
+`__init__.py` files cannot be hot-swapped — they'd need to re-execute the
+whole package body. Use Full Reload for those.
+
 ## Differences from Desktop Simulator
 
 - No `_thread` module (WASM is single-threaded) — Timers use `setInterval`

@@ -3,6 +3,8 @@ import { initLeds } from './leds.js';
 import { initButtons } from './buttons.js';
 import { initControls } from './controls.js';
 import { registerBridge } from './bridge.js';
+import { registerEditorBridge } from './editor_bridge.js';
+import { initEditor } from './editor.js';
 
 const logContent = document.getElementById('log-content');
 const logToggle = document.getElementById('log-toggle');
@@ -110,12 +112,17 @@ async function boot() {
     registerBridge(globalThis);
     addLog('JS bridge registered', 'INFO');
 
+    // Kick off Monaco load + editor UI in the background (non-blocking).
+    initEditor({ addLog }).catch((err) => {
+        addLog(`Editor init failed: ${err.message}`, 'WARNING');
+    });
+
     requestAnimationFrame(updateFps);
 
     setStatus('Loading MicroPython WASM...');
 
     try {
-        const { loadMicroPython } = await import('../build/micropython.mjs');
+        const { loadMicroPython } = await import('../build/micropython.mjs?v=11');
         addLog('MicroPython module loaded, initializing...', 'INFO');
 
         const mp = await loadMicroPython({
@@ -123,6 +130,11 @@ async function boot() {
             stdout: (line) => { addLog(line, 'INFO'); },
             stderr: (line) => { addLog(line, 'ERROR'); },
             linebuffer: true,
+            // Bust browser cache for the WASM binary so rebuilt-locally
+            // changes (e.g. new frozen modules like _hot_reload) take effect
+            // on reload without manual cache clearing. loadMicroPython
+            // forwards this as the Module.locateFile result.
+            url: new URL('../build/micropython.wasm?v=12', import.meta.url).href,
         });
 
         addLog('MicroPython WASM initialized', 'INFO');
@@ -130,6 +142,11 @@ async function boot() {
 
         // Load asset files into Emscripten filesystem
         await loadAssets(mp);
+
+        // Register the editor bridge now that `mp` exists. The editor UI was
+        // initialised earlier (without an `mp` ref) — applyOverlay() will
+        // start working as soon as boot finishes assigning `controller`.
+        registerEditorBridge(globalThis, mp, addLog);
 
         setStatus('Booting badge firmware...');
 

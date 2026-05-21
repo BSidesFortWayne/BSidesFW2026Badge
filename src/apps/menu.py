@@ -35,16 +35,23 @@ class Menu(BaseApp):
         item_count = len(self.menu_items)
         self.display_items = [self.menu_items[i % item_count] for i in range(self.selected_index - 2, self.selected_index + 4)]
 
-        self.config.add("x_offset", 30)
+        self.config.add("x_offset", 20)
         self.config.add("y_offset", SAFE_Y)
         self.config.add("animate", BoolDropdownConfig("Animate", default=False))
 
         self.title_display.fill(BG)
         self.app_selection.fill(BG)
 
-        # Display2 framebuffer for app list
-        self.fbuf_width = 180
-        self.fbuf_height = 240
+        # Display2 framebuffer for app list. Sized to fit within the 240x240
+        # panel from the live offsets — if x_offset + width or y_offset +
+        # height exceeds 240, the GC9A01 wraps the write and the text comes
+        # out sheared on hardware. The web simulator has no bounds check so
+        # it looks fine there regardless. Derive from the live config
+        # (not hardcoded) because Config.add uses setdefault, so a badge
+        # with a stale Menu.json from a previous default keeps its old
+        # x_offset and would still overflow.
+        self.fbuf_width = 240 - self.config['x_offset']
+        self.fbuf_height = 240 - self.config['y_offset']
         self.fbuf_mem = bytearray(self.fbuf_width * self.fbuf_height * 2)
         self.fbuf = framebuf.FrameBuffer(
             self.fbuf_mem,
