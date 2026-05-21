@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BSides FW 2025 Badge Simulator</title>
+    <link rel="stylesheet" href="style.css?v=9">
+</head>
+<body>
+    <div id="app">
+        <div id="badge-area">
+            <div id="board-container">
+                <img id="board-image" src="board_render.png" alt="Badge Board" draggable="false">
+
+                <!-- 2x internal resolution for sharper display when the
+                     #board-container is CSS-scaled down to fit smaller windows.
+                     CSS size below pins the layout to 240×240. -->
+                <canvas id="display1" width="480" height="480" style="width:240px;height:240px"></canvas>
+                <canvas id="display2" width="480" height="480" style="width:240px;height:240px"></canvas>
+
+                <div id="led-strip">
+                    <div class="led" data-index="0"></div>
+                    <div class="led" data-index="1"></div>
+                    <div class="led" data-index="2"></div>
+                    <div class="led" data-index="3"></div>
+                    <div class="led" data-index="4"></div>
+                    <div class="led" data-index="5"></div>
+                    <div class="led" data-index="6"></div>
+                </div>
+
+                <div id="button-overlays">
+                    <div class="btn-overlay" data-btn="0" style="left:198px;top:75px;">SW5<span class="key-hint">0</span></div>
+                    <div class="btn-overlay" data-btn="7" style="left:351px;top:78px;">SW1<span class="key-hint">1</span></div>
+                    <div class="btn-overlay" data-btn="1" style="left:404px;top:78px;">SW2<span class="key-hint">2</span></div>
+                    <div class="btn-overlay" data-btn="2" style="left:457px;top:78px;">SW3<span class="key-hint">3</span></div>
+                    <div class="btn-overlay" data-btn="3" style="left:511px;top:78px;">SW4<span class="key-hint">4</span></div>
+                    <div class="btn-overlay btn-large" data-btn="6" style="left:46px;top:481px;">SW7<span class="key-hint">7</span></div>
+                    <div class="btn-overlay btn-large" data-btn="5" style="left:353px;top:566px;">SW8<span class="key-hint">8</span></div>
+                    <div class="btn-overlay btn-large" data-btn="4" style="left:410px;top:575px;">SW9<span class="key-hint">9</span></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="right-panel">
+            <div id="control-panel">
+                <h2>Hardware Controls</h2>
+
+                <section>
+                    <h3>Accelerometer</h3>
+                    <button id="shake-btn" class="ctrl-btn">Shake Device</button>
+                    <label>Shake Magnitude: <span id="shake-val">2.0</span>g
+                        <input type="range" id="shake-mag" min="0.5" max="8.0" step="0.1" value="2.0">
+                    </label>
+                    <div id="accel-display">X: 0.00g Y: 0.00g Z: 1.00g</div>
+                </section>
+
+                <section>
+                    <h3>Power &amp; Battery</h3>
+                    <label>Battery Voltage: <span id="batt-val">4.20</span>V
+                        <input type="range" id="batt-voltage" min="2.9" max="4.5" step="0.01" value="4.2">
+                    </label>
+                    <label>R1 (top): <span id="r1-val">100.0</span>k&Omega;
+                        <input type="range" id="r1-slider" min="10" max="200" step="0.1" value="100">
+                    </label>
+                    <label>R2 (bottom): <span id="r2-val">47.0</span>k&Omega;
+                        <input type="range" id="r2-slider" min="10" max="200" step="0.1" value="47">
+                    </label>
+                    <div id="divided-voltage">ADC sees: 1340mV</div>
+                </section>
+
+                <div class="controls-row">
+                    <section class="half">
+                        <h3>Charge State</h3>
+                        <select id="charge-state">
+                            <option value="not_charging" selected>not_charging</option>
+                            <option value="charging">charging</option>
+                            <option value="charged">charged</option>
+                            <option value="error">error</option>
+                        </select>
+                    </section>
+                    <section class="half">
+                        <h3>WiFi</h3>
+                        <select id="wifi-state">
+                            <option value="disconnected" selected>disconnected</option>
+                            <option value="connecting">connecting</option>
+                            <option value="connected">connected</option>
+                            <option value="passthrough">passthrough</option>
+                            <option value="ap_mode">ap_mode</option>
+                        </select>
+                    </section>
+                </div>
+
+                <div class="controls-row">
+                    <section class="half">
+                        <h3>Bluetooth</h3>
+                        <select id="bluetooth-state">
+                            <option value="disabled" selected>disabled</option>
+                            <option value="advertising">advertising</option>
+                            <option value="connected">connected</option>
+                            <option value="system_passthrough">system_passthrough</option>
+                        </select>
+                    </section>
+                    <section class="half">
+                        <button id="screenshot-btn" class="ctrl-btn" style="margin-top:22px;">Save Screenshot</button>
+                    </section>
+                </div>
+
+                <div id="status-row">
+                    <span id="status-text">Initializing...</span>
+                    <span id="fps-display">FPS: --</span>
+                </div>
+
+                <div id="info-box">
+                    Keys: 0=SW5(boot) 1-4=SW1-4 7-9=SW7-9 | Click buttons on badge
+                </div>
+            </div>
+
+            <div id="log-panel">
+                <div id="log-resize-handle"></div>
+                <div id="log-header">
+                    <span>Log Output</span>
+                    <div>
+                        <button id="log-clear">Clear</button>
+                        <button id="log-toggle">Collapse</button>
+                    </div>
+                </div>
+                <div id="log-content"></div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="js/main.js?v=9"></script>
+</body>
+</html>

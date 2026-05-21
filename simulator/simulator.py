@@ -100,8 +100,9 @@ def validate_paths(project_path: str, micropython_path: str) -> Tuple[bool, str]
     if not os.path.exists(project_main):
         return False, f'No main.py found in project directory: {project_path}'
     
-    # Check MicroPython executable
-    if shutil.which(micropython_path) is None:
+    # Check MicroPython executable (supports "wsl micropython" style paths)
+    mp_parts = micropython_path.split()
+    if shutil.which(mp_parts[0]) is None:
         return False, f'MicroPython executable not found: {micropython_path}\nTry: apt install micropython, or uv run micropython'
     
     # Check libraries directory
@@ -229,8 +230,10 @@ with open('main.py', 'r') as f:
         return None
     
     try:
+        # Support "wsl micropython" style paths by splitting
+        mp_parts = micropython_path.split()
         process = subprocess.Popen(
-            [micropython_path, '-X', f'heapsize={heap_size}', '_boot_then_main.py'],
+            [*mp_parts, '-X', f'heapsize={heap_size}', '_boot_then_main.py'],
             cwd=str(src_dir),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,

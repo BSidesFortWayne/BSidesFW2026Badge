@@ -1,0 +1,322 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+    --board-scale: 1;
+    --board-w: 560px;
+    --board-h: 1060px;
+}
+
+html, body {
+    height: 100%;
+    overflow: hidden;
+    background: #1a1a1a;
+    color: #ddd;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px;
+}
+
+#app {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+}
+
+/* ── Badge Area (left) ── */
+#badge-area {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 8px;
+    height: 100vh;
+}
+
+#board-container {
+    position: relative;
+    width: 560px;
+    height: 1060px;
+    transform-origin: top left;
+    overflow: visible;
+}
+
+#board-image {
+    width: 560px;
+    height: 1060px;
+    display: block;
+    user-select: none;
+    pointer-events: none;
+}
+
+/* Displays.
+ *
+ * The whole #board-container is `transform: scale(N)`'d down when the window
+ * is shorter than the badge's natural 1060px height. With `image-rendering:
+ * pixelated`, non-integer downscales drop source pixels — bitmap-font glyphs
+ * lose strokes and look "broken". `auto` lets the browser bilinear-filter
+ * during the transform, which is consistent at any scale (very slightly
+ * softer at 1:1 than nearest-neighbor would be, but the canvas internal
+ * resolution is unchanged so no detail is lost).
+ */
+#display1, #display2 {
+    position: absolute;
+    clip-path: circle(50%);
+    image-rendering: auto;
+}
+#display1 { left: 70px; top: 558px; }
+#display2 { left: 234px; top: 774px; }
+
+/* ── LED strip ── */
+#led-strip {
+    position: absolute;
+    left: 499px;
+    top: 175px;
+    transform: translateX(-50%);
+}
+
+.led {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.25);
+    transition: background-color 0.05s, box-shadow 0.05s;
+    margin-bottom: 84.7px;
+}
+
+.led.active {
+    border: none;
+}
+
+/* ── Button overlays ── */
+.btn-overlay {
+    position: absolute;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: rgba(100, 150, 255, 0.12);
+    border: 2px solid rgba(100, 150, 255, 0.35);
+    cursor: pointer;
+    transform: translate(-50%, -50%);
+    transition: background 0.1s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: bold;
+    color: rgba(255,255,255,0.6);
+    line-height: 1.1;
+    user-select: none;
+}
+
+.btn-overlay.btn-large {
+    width: 40px;
+    height: 40px;
+    font-size: 10px;
+}
+
+.key-hint {
+    font-size: 8px;
+    opacity: 0.5;
+    font-weight: normal;
+}
+
+.btn-overlay:hover {
+    background: rgba(100, 150, 255, 0.3);
+    border-color: rgba(100, 150, 255, 0.6);
+}
+
+.btn-overlay.pressed {
+    background: rgba(0, 255, 0, 0.35);
+    border-color: rgba(0, 255, 0, 0.6);
+}
+
+/* ── Right Panel ── */
+#right-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 280px;
+    height: 100vh;
+    border-left: 1px solid #333;
+    overflow: hidden;
+}
+
+/* ── Control Panel ── */
+#control-panel {
+    flex: 1;
+    padding: 12px 16px;
+    background: #222;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+#control-panel h2 {
+    font-size: 15px;
+    margin-bottom: 12px;
+    color: #fff;
+    border-bottom: 1px solid #444;
+    padding-bottom: 6px;
+}
+
+#control-panel section {
+    margin-bottom: 14px;
+}
+
+#control-panel h3 {
+    font-size: 11px;
+    color: #999;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+#control-panel label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 12px;
+}
+
+#control-panel input[type="range"] {
+    width: 100%;
+    margin-top: 3px;
+    accent-color: #4af;
+}
+
+#control-panel select {
+    width: 100%;
+    padding: 5px;
+    background: #333;
+    color: #ddd;
+    border: 1px solid #555;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+.controls-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.controls-row .half {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+.ctrl-btn {
+    width: 100%;
+    padding: 6px;
+    background: #3a3a3a;
+    color: #ddd;
+    border: 1px solid #555;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.15s;
+}
+.ctrl-btn:hover { background: #4a4a4a; }
+.ctrl-btn:active { background: #555; }
+
+#accel-display, #divided-voltage {
+    font-family: 'Consolas', monospace;
+    font-size: 11px;
+    color: #8cf;
+    padding: 3px 0;
+}
+
+#status-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 8px;
+    background: #1a1a1a;
+    border-radius: 3px;
+    margin-bottom: 8px;
+}
+
+#fps-display {
+    font-family: 'Consolas', monospace;
+    font-size: 11px;
+    color: #888;
+}
+
+#status-text { color: #fa4; font-size: 12px; }
+#status-text.ready { color: #4f4; }
+#status-text.error { color: #f44; }
+
+#info-box {
+    font-size: 11px;
+    color: #666;
+    line-height: 1.5;
+    padding: 6px 8px;
+    background: #1a1a1a;
+    border-radius: 3px;
+}
+
+/* ── Log Panel ── */
+#log-panel {
+    flex: 0 0 200px;
+    background: #141414;
+    border-top: 1px solid #444;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    min-height: 35px;
+}
+
+#log-panel.collapsed {
+    flex: 0 0 35px;
+}
+
+#log-resize-handle {
+    height: 4px;
+    cursor: ns-resize;
+    background: transparent;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+}
+
+#log-resize-handle:hover {
+    background: #4af;
+}
+
+#log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 10px;
+    background: #1e1e1e;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+}
+
+#log-header span { font-weight: bold; font-size: 12px; color: #aaa; }
+
+#log-header button {
+    background: #333;
+    color: #ccc;
+    border: 1px solid #555;
+    padding: 1px 8px;
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 11px;
+    margin-left: 6px;
+}
+#log-header button:hover { background: #444; }
+
+#log-content {
+    padding: 4px 10px;
+    overflow-y: auto;
+    flex: 1;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 11px;
+    line-height: 1.3;
+}
+
+.log-entry { white-space: nowrap; }
+.log-entry.error { color: #ff6464; }
+.log-entry.warning { color: #ffc864; }
+.log-entry.info { color: #96c8ff; }

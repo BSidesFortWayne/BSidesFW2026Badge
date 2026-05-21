@@ -1,5 +1,6 @@
 import framebuf
 from lib.microfont import MicroFont
+from ui.theme import FONT_BODY
 
 class WidgetApp:
     def __init__(self, controller):
@@ -13,5 +14,5 @@ class WidgetApp:
             self.fbuf_height,
             framebuf.RGB565
         )
-        self.font = MicroFont("fonts/victor_R_24.mfnt", cache_index=True, cache_chars=True)
+        self.font = MicroFont(FONT_BODY, cache_index=True, cache_chars=True)
     

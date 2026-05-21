@@ -4,6 +4,7 @@ from apps.app import BaseApp
 import fonts.arial32px as arial32px
 from lib.microfont import MicroFont
 import framebuf
+from ui.theme import BG, FG, FONT_HEADING, SAFE_WIDTH
 
 class App(BaseApp):
     """
@@ -16,7 +17,6 @@ class App(BaseApp):
         self.view = 0
         self.displays = self.controller.bsp.displays
 
-        # define colors
         self.black = self.displays.COLOR_LOOKUP['gc9a01']['black']
         self.white = self.displays.COLOR_LOOKUP['gc9a01']['white']
         self.red = self.displays.COLOR_LOOKUP['gc9a01']['red']
@@ -38,21 +38,21 @@ class App(BaseApp):
         self.switch_to_badge = False
 
         self.last_checksum = self.config.checksum()
-        self.color_options = [self.black, self.white, self.red, self.blue, self.magenta, self.yellow, self.cyan, self.green]
+        # BG and FG first so theme defaults are index 0/1
+        self.color_options = [BG, FG, self.red, self.blue, self.magenta, self.yellow, self.cyan, self.green]
 
-        # framebuffer for showing time
         self.fbuf_width = 200
         self.fbuf_height = 240
 
         self.fbuf_mem = bytearray(self.fbuf_width*self.fbuf_height*2)
         self.fbuf = framebuf.FrameBuffer(
-            self.fbuf_mem, 
-            self.fbuf_width, 
-            self.fbuf_height, 
+            self.fbuf_mem,
+            self.fbuf_width,
+            self.fbuf_height,
             framebuf.RGB565
         )
         self.fbuf_mv = memoryview(self.fbuf_mem)
-        self.font = MicroFont("fonts/victor_B_32.mfnt", cache_index=True, cache_chars=True)
+        self.font = MicroFont(FONT_HEADING, cache_index=True, cache_chars=True)
 
     def wrap_text(self, text, font, max_width, display):
         words = text.split(' ')
@@ -102,7 +102,7 @@ class App(BaseApp):
             self.displays.display1.fill(display1_bg_color)
             self.displays.display2.fill(display2_bg_color)
 
-            max_width = self.displays.display1.width() - 40  # Adjust padding as needed
+            max_width = SAFE_WIDTH
             wrapped_first_name = self.wrap_text(first_name, arial32px, max_width, self.displays.display1)
             wrapped_last_name = self.wrap_text(last_name, arial32px, max_width, self.displays.display1)
             wrapped_company = self.wrap_text(company, arial32px, max_width, self.displays.display2)

@@ -54,13 +54,13 @@ class TextMenuWidget(Widget):
         if isinstance(items, int):
             self.layout = StackLayout(name="IntEditLayout", direction=Direction.VERTICAL, spacing=5, padding=10)
             self.layout.add_widget(
-                TextBox(text=str(items), height=20, width=100)
+                TextBox(text=str(items), height=20, width=200)
             )
         # if a string, show the string edit widget
         elif isinstance(items, str):
             self.layout = StackLayout(name="StringEditLayout", direction=Direction.VERTICAL, spacing=5, padding=10)
             self.layout.add_widget(
-                TextBox(text=items, height=20, width=100)
+                TextBox(text=items, height=20, width=200)
             )
         # if a dict, show the sub-menu
         elif isinstance(items, dict):

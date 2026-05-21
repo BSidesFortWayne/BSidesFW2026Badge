@@ -200,3 +200,5 @@ cython_debug/
 
 # WiFi config
 /src/wifi.json
+
+.claude

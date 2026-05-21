@@ -1,40 +1,37 @@
 import framebuf
 from lib.microfont import MicroFont
 from ui.widget import Widget
-from drivers.displays import rgb
+from ui.theme import FG, MUTED, ACCENT, FONT_BODY, FONT_SMALL, PADDING
 
 class ListItem(Widget):
     """
     A list item with title and optional subtitle.
     """
     def __init__(
-            self, 
-            title: str, 
-            subtitle: str="", 
-            selected: bool=False, 
-            name: str="", 
-            title_font: MicroFont | None = None, 
+            self,
+            title: str,
+            subtitle: str="",
+            selected: bool=False,
+            name: str="",
+            title_font: MicroFont | None = None,
             subtitle_font: MicroFont | None = None
             ):
         super().__init__(name)
         self.title = title
         self.subtitle = subtitle
         self.selected = selected
-        
-        # Default fonts if not provided
-        self.title_font = title_font or MicroFont("fonts/victor_R_24.mfnt", cache_index=True, cache_chars=True)
+
+        self.title_font = title_font or MicroFont(FONT_BODY, cache_index=True, cache_chars=True)
         if subtitle:
-            self.subtitle_font = subtitle_font or MicroFont("fonts/victor_R_18.mfnt", cache_index=True, cache_chars=True)
+            self.subtitle_font = subtitle_font or MicroFont(FONT_SMALL, cache_index=True, cache_chars=True)
         else:
             self.subtitle_font = None
-            
-        # Colors
-        self.title_color = rgb((255, 255, 255))  # White
-        self.subtitle_color = rgb((200, 200, 200))  # Light gray
-        self.selection_color = rgb((0, 100, 255))  # Blue
-        
-        # Spacing
-        self.padding = 5
+
+        self.title_color = FG
+        self.subtitle_color = MUTED
+        self.selection_color = ACCENT
+
+        self.padding = PADDING
         
     def set_selected(self, selected):
         """Set the selection state of this item"""

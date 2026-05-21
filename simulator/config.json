@@ -1,6 +1,6 @@
 {
   "project_path": "../src",
-  "micropython_path": "micropython",
+  "micropython_path": "wsl micropython",
   "socket_port": 4455,
   "socket_host": "127.0.0.1",
   "binary_protocol": true,
