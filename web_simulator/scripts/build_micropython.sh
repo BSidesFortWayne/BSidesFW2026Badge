@@ -28,6 +28,11 @@ else
 fi
 source "$DEPS_DIR/emsdk/emsdk_env.sh" 2>/dev/null || true
 
+# Warm up emcc sanity cache serially. Avoids a Python 3.14 race in
+# emscripten/tools/filelock.py where parallel emcc jobs unlink cache.lock
+# concurrently and one of them blows up.
+emcc --check >/dev/null 2>&1 || true
+
 # Step 2: Clone/update MicroPython
 if [ ! -d "$DEPS_DIR/micropython" ]; then
     echo "[2/6] Cloning MicroPython..."
@@ -38,6 +43,13 @@ else
     git pull --ff-only 2>/dev/null || true
 fi
 MP_DIR="$DEPS_DIR/micropython"
+
+# Step 2b: Apply local MicroPython patches (idempotent)
+WEBASM_MAIN="$MP_DIR/ports/webassembly/main.c"
+if [ -f "$WEBASM_MAIN" ] && ! grep -q 'external_call_depth __attribute__((unused))' "$WEBASM_MAIN"; then
+    echo "  Patching ports/webassembly/main.c for -Werror=unused-but-set-variable..."
+    sed -i 's/^static size_t external_call_depth = 0;$/static size_t external_call_depth __attribute__((unused)) = 0;/' "$WEBASM_MAIN"
+fi
 
 # Step 3: Build mpy-cross
 echo "[3/6] Building mpy-cross..."
@@ -74,20 +86,32 @@ if [ -f "$FREEZE_DIR/lib/microfont.py" ]; then
     python3 "$SCRIPT_DIR/patch_microfont.py" "$FREEZE_DIR/lib/microfont.py"
 fi
 
+# Strip @micropython.native / @micropython.viper — unsupported on WASM port.
+echo "  Stripping native/viper decorators from frozen sources..."
+python3 "$SCRIPT_DIR/patch_native_decorators.py" "$FREEZE_DIR"
+
 # Step 5: Build MicroPython WASM
 echo "[5/6] Building MicroPython WASM port..."
 cd "$MP_DIR/ports/webassembly"
 make submodules
 make clean
-make \
+BADGE_FREEZE_DIR="$FREEZE_DIR" make \
     FROZEN_MANIFEST="$WEB_SIM_DIR/scripts/manifest.py" \
     -j$(nproc 2>/dev/null || echo 4)
 
 # Step 6: Copy build artifacts
 echo "[6/6] Copying build artifacts..."
 mkdir -p "$BUILD_DIR"
-cp "$MP_DIR/ports/webassembly/build/micropython.mjs" "$BUILD_DIR/"
-cp "$MP_DIR/ports/webassembly/build/micropython.wasm" "$BUILD_DIR/"
+MP_BUILD_OUT="$MP_DIR/ports/webassembly/build-standard"
+if [ ! -f "$MP_BUILD_OUT/micropython.mjs" ]; then
+    MP_BUILD_OUT="$MP_DIR/ports/webassembly/build"
+fi
+cp "$MP_BUILD_OUT/micropython.mjs" "$BUILD_DIR/"
+cp "$MP_BUILD_OUT/micropython.wasm" "$BUILD_DIR/"
+
+# Patch micropython.mjs to fix ASYNCIFY re-entrancy in proxy_call_python.
+echo "  Patching micropython.mjs for async re-entrancy..."
+python3 "$SCRIPT_DIR/patch_mjs.py" "$BUILD_DIR/micropython.mjs"
 
 # Package non-Python assets (fonts, images, songs, configs)
 echo "  Packaging firmware assets..."
@@ -100,6 +124,16 @@ for asset_dir in fonts songs img config; do
         cp -r "$PROJECT_DIR/src/$asset_dir" "$ASSETS_DIR/"
     fi
 done
+
+# apps/ is enumerated at runtime by app_directory.py via os.listdir(), and
+# each file is read for checksumming. The frozen copy isn't enough — the
+# files must exist in MEMFS too.
+if [ -d "$PROJECT_DIR/src/apps" ]; then
+    cp -r "$PROJECT_DIR/src/apps" "$ASSETS_DIR/"
+    # Same decorator strip as the freeze dir — the runtime parser also
+    # can't handle @micropython.native / @micropython.viper on the WASM port.
+    python3 "$SCRIPT_DIR/patch_native_decorators.py" "$ASSETS_DIR/apps" >/dev/null
+fi
 
 # Generate manifest.json for the web loader
 python3 -c "

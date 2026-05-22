@@ -1,0 +1,12 @@
+services:
+  web-simulator:
+    build:
+      # The build script reads src/ alongside web_simulator/, so the
+      # context must be the project root one level up.
+      context: ..
+      dockerfile: web_simulator/Dockerfile
+    image: bsides-web-simulator:latest
+    container_name: bsides-web-simulator
+    ports:
+      - "8080:80"
+    restart: unless-stopped
