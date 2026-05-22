@@ -32,7 +32,7 @@ let expandedFolders = new Set();
 let logFn = (msg, level) => console.log(`[editor:${level || 'INFO'}] ${msg}`);
 
 // DOM refs (populated by setupUiRefs)
-let dirtyDot, activePathEl, reloadBtn, downloadBtn, revertBtn, treeEl;
+let dirtyDot, activePathEl, reloadBtn, downloadBtn, downloadZipBtn, revertBtn, treeEl;
 
 export async function initEditor({ addLog } = {}) {
     if (addLog) logFn = addLog;
@@ -89,6 +89,7 @@ function setupUiRefs() {
     activePathEl = document.getElementById('editor-active-path');
     reloadBtn = document.getElementById('editor-reload');
     downloadBtn = document.getElementById('editor-download');
+    downloadZipBtn = document.getElementById('editor-download-zip');
     revertBtn = document.getElementById('editor-revert');
     dirtyDot = document.getElementById('editor-dirty');
     treeEl = document.getElementById('editor-tree');
@@ -118,6 +119,7 @@ function setupUiRefs() {
         });
     }
     if (downloadBtn) downloadBtn.addEventListener('click', onDownload);
+    if (downloadZipBtn) downloadZipBtn.addEventListener('click', onDownloadZip);
     if (revertBtn) revertBtn.addEventListener('click', onRevert);
 
     const newFileBtn = document.getElementById('editor-new-file');
@@ -980,6 +982,68 @@ async function onDownload() {
     a.click();
     document.body.removeChild(a);
     setTimeout(() => URL.revokeObjectURL(url), 500);
+}
+
+const JSZIP_CDN = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js';
+let jsZipLoading = null;
+function loadJSZip() {
+    if (window.JSZip) return Promise.resolve(window.JSZip);
+    if (jsZipLoading) return jsZipLoading;
+    // Monaco's loader installs a global `define` with `define.amd`, which makes
+    // JSZip's UMD wrapper register itself as an AMD module instead of putting
+    // it on `window.JSZip`. Temporarily hide AMD across the script load.
+    jsZipLoading = new Promise((resolve, reject) => {
+        const savedDefine = window.define;
+        const savedAmd = savedDefine && savedDefine.amd;
+        if (savedDefine) savedDefine.amd = undefined;
+        const script = document.createElement('script');
+        script.src = JSZIP_CDN;
+        const restore = () => {
+            if (savedDefine) savedDefine.amd = savedAmd;
+        };
+        script.onload = () => {
+            restore();
+            if (window.JSZip) resolve(window.JSZip);
+            else reject(new Error('JSZip loaded but window.JSZip missing'));
+        };
+        script.onerror = () => {
+            restore();
+            reject(new Error('JSZip fetch failed'));
+        };
+        document.head.appendChild(script);
+    });
+    return jsZipLoading;
+}
+
+async function onDownloadZip() {
+    if (downloadZipBtn) downloadZipBtn.disabled = true;
+    try {
+        const JSZip = await loadJSZip();
+        const files = await getAllFiles();
+        if (files.length === 0) {
+            logFn('Download Zip: no files in filesystem', 'WARNING');
+            return;
+        }
+        const zip = new JSZip();
+        for (const { path, content } of files) {
+            zip.file(path, content);
+        }
+        const blob = await zip.generateAsync({ type: 'blob' });
+        const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `badge-src-${ts}.zip`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 500);
+        logFn(`Downloaded zip with ${files.length} files`, 'INFO');
+    } catch (e) {
+        logFn(`Download Zip failed: ${e.message}`, 'WARNING');
+    } finally {
+        if (downloadZipBtn) downloadZipBtn.disabled = false;
+    }
 }
 
 async function onRevert() {
