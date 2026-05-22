@@ -430,6 +430,18 @@ html, body {
 }
 #editor-reload:hover { background: #3d5a3d !important; }
 
+#editor-flash-modified, #editor-flash-all {
+    background: #4a3a2d !important;
+    border-color: #7a5a3a !important;
+    color: #fdc !important;
+}
+#editor-flash-modified:hover, #editor-flash-all:hover { background: #5a4630 !important; }
+#editor-flash-modified:disabled, #editor-flash-all:disabled {
+    background: #333 !important;
+    border-color: #555 !important;
+    color: #888 !important;
+}
+
 #editor-body {
     flex: 1;
     min-height: 0;
@@ -616,4 +628,28 @@ html, body {
     flex: 1;
     min-width: 0;
     min-height: 0;
+}
+
+/* ── Mobile: badge-only fullscreen view ── */
+@media (max-width: 768px), (max-height: 500px) and (pointer: coarse) {
+    #right-panel {
+        display: none;
+    }
+
+    #app {
+        width: 100vw;
+    }
+
+    #badge-area {
+        flex: 1;
+        width: 100vw;
+        height: 100vh;
+        padding: 0;
+        align-items: center;
+        overflow: hidden;
+    }
+
+    #board-container {
+        transform-origin: center center;
+    }
 }

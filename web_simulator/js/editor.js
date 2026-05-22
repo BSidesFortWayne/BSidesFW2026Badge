@@ -275,13 +275,11 @@ async function loadOriginal(path) {
 
 function saveContent(path, content) {
     if (srcFiles.has(path) && !getDeleted().has(path)) {
-        // Edit of original src file.
-        const original = originalCache.get(path);
-        if (original !== undefined && content === original) {
-            localStorage.removeItem(KEY_EDIT + path);
-        } else {
-            localStorage.setItem(KEY_EDIT + path, content);
-        }
+        // Once a user has touched a src file, keep KEY_EDIT set even if they
+        // manually type the content back to match the original — otherwise
+        // "Flash Modified" would silently skip the file after a revert. Use
+        // the Revert button to explicitly drop the edit.
+        localStorage.setItem(KEY_EDIT + path, content);
     } else {
         // Created file (no original to diff against).
         localStorage.setItem(KEY_CREATED + path, content);
@@ -872,8 +870,11 @@ function createMonaco() {
         tabSize: 4,
         insertSpaces: true,
     });
-    monacoEditor.onDidChangeModelContent(() => {
+    monacoEditor.onDidChangeModelContent((e) => {
         if (!activePath) return;
+        // setValue() during file open fires this event with isFlush=true. We
+        // only want to mark a file as edited on actual user keystrokes.
+        if (e && e.isFlush) return;
         saveContent(activePath, monacoEditor.getValue());
         scheduleDirtyRefresh();
     });
@@ -995,6 +996,41 @@ async function onRevert() {
     }
     await updateDirtyIndicator();
     renderTree();
+}
+
+// ── Public helpers for flash.js (Web Serial flasher) ─────────────────────
+
+// Files the user has edited or created in the browser — these are the
+// overlays that should override the badge's frozen modules. Returns
+// [{ path, content }] sorted by path.
+export async function getModifiedFiles() {
+    const created = new Set();
+    const edited = new Set();
+    for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k) continue;
+        if (k.startsWith(KEY_CREATED)) created.add(k.slice(KEY_CREATED.length));
+        else if (k.startsWith(KEY_EDIT)) edited.add(k.slice(KEY_EDIT.length));
+    }
+    const deleted = getDeleted();
+    const paths = new Set();
+    for (const p of created) paths.add(p);
+    for (const p of edited) if (!deleted.has(p)) paths.add(p);
+    const out = [];
+    for (const p of [...paths].sort()) {
+        out.push({ path: p, content: await loadContent(p) });
+    }
+    return out;
+}
+
+// Every visible file in the editor (originals + overlays − tombstones).
+// Used by "Flash All src/" to mirror the full tree to the badge.
+export async function getAllFiles() {
+    const out = [];
+    for (const p of listAllFiles()) {
+        out.push({ path: p, content: await loadContent(p) });
+    }
+    return out;
 }
 
 // ── Index / Monaco loader ─────────────────────────────────────────────────

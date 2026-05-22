@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BSides FW 2025 Badge Simulator</title>
-    <link rel="stylesheet" href="style.css?v=14">
+    <link rel="stylesheet" href="style.css?v=15">
 </head>
 <body>
     <div id="app">
@@ -124,6 +124,8 @@
                     <div class="editor-actions">
                         <button id="editor-reload" title="Hot-swap current app">Reload App</button>
                         <button id="editor-full-reload" title="Full page reload">Full Reload</button>
+                        <button id="editor-flash-modified" title="Flash modified files to a connected badge over USB (Web Serial)">Flash Modified</button>
+                        <button id="editor-flash-all" title="Flash the full src/ tree to a connected badge over USB (Web Serial)">Flash All</button>
                         <button id="editor-download" title="Download edited file">Download</button>
                         <button id="editor-revert" title="Discard edits for this file">Revert</button>
                         <button id="editor-toggle">Expand</button>
@@ -157,6 +159,6 @@
         </div>
     </div>
 
-    <script type="module" src="js/main.js?v=14"></script>
+    <script type="module" src="js/main.js?v=17"></script>
 </body>
 </html>

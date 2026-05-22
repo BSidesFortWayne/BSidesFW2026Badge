@@ -4,7 +4,8 @@ import { initButtons } from './buttons.js';
 import { initControls } from './controls.js';
 import { registerBridge } from './bridge.js';
 import { registerEditorBridge } from './editor_bridge.js';
-import { initEditor } from './editor.js';
+import { initEditor, getModifiedFiles, getAllFiles } from './editor.js?v=16';
+import { initFlash } from './flash.js?v=16';
 
 const logContent = document.getElementById('log-content');
 const logToggle = document.getElementById('log-toggle');
@@ -36,19 +37,31 @@ logClear.addEventListener('click', () => {
     logContent.innerHTML = '';
 });
 
-// Scale badge to fit viewport height
+// Scale badge to fit viewport. On phones the right panel is hidden via CSS
+// and the badge fills the whole screen, so we scale against both axes.
+const mobileQuery = window.matchMedia('(max-width: 768px), (max-height: 500px) and (pointer: coarse)');
+
 function scaleBadge() {
     const boardContainer = document.getElementById('board-container');
     const badgeArea = document.getElementById('badge-area');
-    const availHeight = window.innerHeight - 20;
+    const naturalWidth = 560;
     const naturalHeight = 1060;
-    const scale = Math.min(1, availHeight / naturalHeight);
-    boardContainer.style.transform = `scale(${scale})`;
-    badgeArea.style.width = `${Math.ceil(560 * scale) + 20}px`;
+
+    if (mobileQuery.matches) {
+        const scale = Math.min(window.innerWidth / naturalWidth, window.innerHeight / naturalHeight);
+        boardContainer.style.transform = `scale(${scale})`;
+        badgeArea.style.width = '100vw';
+    } else {
+        const availHeight = window.innerHeight - 20;
+        const scale = Math.min(1, availHeight / naturalHeight);
+        boardContainer.style.transform = `scale(${scale})`;
+        badgeArea.style.width = `${Math.ceil(naturalWidth * scale) + 20}px`;
+    }
 }
 
 scaleBadge();
 window.addEventListener('resize', scaleBadge);
+mobileQuery.addEventListener('change', scaleBadge);
 
 // Log panel drag-to-resize
 const logResizeHandle = document.getElementById('log-resize-handle');
@@ -116,6 +129,11 @@ async function boot() {
     initEditor({ addLog }).catch((err) => {
         addLog(`Editor init failed: ${err.message}`, 'WARNING');
     });
+
+    // Wire up the "Flash to badge" buttons. Safe to call even before the
+    // editor has finished initializing — the file-listing helpers read
+    // straight from localStorage.
+    initFlash({ getModifiedFiles, getAllFiles, addLog });
 
     requestAnimationFrame(updateFps);
 
