@@ -28,22 +28,38 @@ export function registerEditorBridge(globalObj, mp, addLog) {
         }
 
         const sourceLit = JSON.stringify(source);
+        // Catch on the Python side and stash the formatted traceback in a
+        // global. JS-side `catch (e)` receives a PyProxy of the exception
+        // whose `.message` is undefined, so without this we'd lose the
+        // actual error text. `sys.print_exception` is also called so the
+        // full traceback shows up in the log via stderr.
         const code = `
-import _hot_reload
+import _hot_reload, sys
 try:
     controller
 except NameError:
     controller = None
+_hot_reload_err = None
 if controller is None:
     print('[editor] Controller not ready yet; skipping reload')
 else:
-    await _hot_reload.reload_app(controller, ${JSON.stringify(modulePath)}, ${sourceLit})
+    try:
+        await _hot_reload.reload_app(controller, ${JSON.stringify(modulePath)}, ${sourceLit})
+    except BaseException as _e:
+        sys.print_exception(_e)
+        _hot_reload_err = '%s: %s' % (type(_e).__name__, _e)
 `;
         try {
             await mp.runPythonAsync(code);
+            const err = mp.pyimport('__main__')._hot_reload_err;
+            if (err) {
+                log(`Reload failed for ${modulePath}: ${err}`, 'ERROR');
+                throw new Error(err);
+            }
             log(`Reloaded ${modulePath}`, 'INFO');
         } catch (e) {
-            log(`Reload failed for ${modulePath}: ${e.message}`, 'ERROR');
+            const msg = (e && e.message) || (e && typeof e.toString === 'function' && e.toString()) || String(e);
+            log(`Reload failed for ${modulePath}: ${msg}`, 'ERROR');
             throw e;
         }
     }
