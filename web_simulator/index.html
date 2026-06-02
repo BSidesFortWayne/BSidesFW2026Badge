@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>BSides FW 2025 Badge Simulator</title>
-    <link rel="stylesheet" href="style.css?v=16">
+    <link rel="stylesheet" href="style.css?v=17">
 </head>
 <body>
     <div id="app">
@@ -43,75 +43,96 @@
 
         <div id="right-panel">
             <div id="control-panel">
-                <h2>Hardware Controls</h2>
-
-                <section>
-                    <h3>Accelerometer</h3>
-                    <button id="shake-btn" class="ctrl-btn">Shake Device</button>
-                    <label>Shake Magnitude: <span id="shake-val">2.0</span>g
-                        <input type="range" id="shake-mag" min="0.5" max="8.0" step="0.1" value="2.0">
-                    </label>
-                    <div id="accel-display">X: 0.00g Y: 0.00g Z: 1.00g</div>
-                </section>
-
-                <section>
-                    <h3>Power &amp; Battery</h3>
-                    <label>Battery Voltage: <span id="batt-val">4.20</span>V
-                        <input type="range" id="batt-voltage" min="2.9" max="4.5" step="0.01" value="4.2">
-                    </label>
-                    <label>R1 (top): <span id="r1-val">100.0</span>k&Omega;
-                        <input type="range" id="r1-slider" min="10" max="200" step="0.1" value="100">
-                    </label>
-                    <label>R2 (bottom): <span id="r2-val">47.0</span>k&Omega;
-                        <input type="range" id="r2-slider" min="10" max="200" step="0.1" value="47">
-                    </label>
-                    <div id="divided-voltage">ADC sees: 1340mV</div>
-                </section>
-
-                <div class="controls-row">
-                    <section class="half">
-                        <h3>Charge State</h3>
-                        <select id="charge-state">
-                            <option value="not_charging" selected>not_charging</option>
-                            <option value="charging">charging</option>
-                            <option value="charged">charged</option>
-                            <option value="error">error</option>
-                        </select>
-                    </section>
-                    <section class="half">
-                        <h3>WiFi</h3>
-                        <select id="wifi-state">
-                            <option value="disconnected" selected>disconnected</option>
-                            <option value="connecting">connecting</option>
-                            <option value="connected">connected</option>
-                            <option value="passthrough">passthrough</option>
-                            <option value="ap_mode">ap_mode</option>
-                        </select>
-                    </section>
+                <div id="control-tabs">
+                    <button class="ctrl-tab active" data-tab="hw">Hardware</button>
+                    <button class="ctrl-tab" data-tab="config">Config</button>
                 </div>
 
-                <div class="controls-row">
-                    <section class="half">
-                        <h3>Bluetooth</h3>
-                        <select id="bluetooth-state">
-                            <option value="disabled" selected>disabled</option>
-                            <option value="advertising">advertising</option>
-                            <option value="connected">connected</option>
-                            <option value="system_passthrough">system_passthrough</option>
+                <div id="control-tab-hw" class="ctrl-tab-content active">
+                    <section>
+                        <h3>Accelerometer</h3>
+                        <button id="shake-btn" class="ctrl-btn">Shake Device</button>
+                        <label>Shake Magnitude: <span id="shake-val">2.0</span>g
+                            <input type="range" id="shake-mag" min="0.5" max="8.0" step="0.1" value="2.0">
+                        </label>
+                        <div id="accel-display">X: 0.00g Y: 0.00g Z: 1.00g</div>
+                    </section>
+
+                    <section>
+                        <h3>Power &amp; Battery</h3>
+                        <label>Battery Voltage: <span id="batt-val">4.20</span>V
+                            <input type="range" id="batt-voltage" min="2.9" max="4.5" step="0.01" value="4.2">
+                        </label>
+                        <label>R1 (top): <span id="r1-val">100.0</span>k&Omega;
+                            <input type="range" id="r1-slider" min="10" max="200" step="0.1" value="100">
+                        </label>
+                        <label>R2 (bottom): <span id="r2-val">47.0</span>k&Omega;
+                            <input type="range" id="r2-slider" min="10" max="200" step="0.1" value="47">
+                        </label>
+                        <div id="divided-voltage">ADC sees: 1340mV</div>
+                    </section>
+
+                    <div class="controls-row">
+                        <section class="half">
+                            <h3>Charge State</h3>
+                            <select id="charge-state">
+                                <option value="not_charging" selected>not_charging</option>
+                                <option value="charging">charging</option>
+                                <option value="charged">charged</option>
+                                <option value="error">error</option>
+                            </select>
+                        </section>
+                        <section class="half">
+                            <h3>WiFi</h3>
+                            <select id="wifi-state">
+                                <option value="disconnected" selected>disconnected</option>
+                                <option value="connecting">connecting</option>
+                                <option value="connected">connected</option>
+                                <option value="passthrough">passthrough</option>
+                                <option value="ap_mode">ap_mode</option>
+                            </select>
+                        </section>
+                    </div>
+
+                    <div class="controls-row">
+                        <section class="half">
+                            <h3>Bluetooth</h3>
+                            <select id="bluetooth-state">
+                                <option value="disabled" selected>disabled</option>
+                                <option value="advertising">advertising</option>
+                                <option value="connected">connected</option>
+                                <option value="system_passthrough">system_passthrough</option>
+                            </select>
+                        </section>
+                        <section class="half">
+                            <button id="screenshot-btn" class="ctrl-btn" style="margin-top:22px;">Save Screenshot</button>
+                        </section>
+                    </div>
+
+                    <div id="status-row">
+                        <span id="status-text">Initializing...</span>
+                        <span id="fps-display">FPS: --</span>
+                    </div>
+
+                    <div id="info-box">
+                        Keys: 0=SW5(boot) 1-4=SW1-4 7-9=SW7-9 | Click buttons on badge
+                    </div>
+                </div>
+
+                <div id="control-tab-config" class="ctrl-tab-content">
+                    <div id="config-toolbar">
+                        <select id="config-scope" disabled>
+                            <option>Loading…</option>
                         </select>
-                    </section>
-                    <section class="half">
-                        <button id="screenshot-btn" class="ctrl-btn" style="margin-top:22px;">Save Screenshot</button>
-                    </section>
-                </div>
-
-                <div id="status-row">
-                    <span id="status-text">Initializing...</span>
-                    <span id="fps-display">FPS: --</span>
-                </div>
-
-                <div id="info-box">
-                    Keys: 0=SW5(boot) 1-4=SW1-4 7-9=SW7-9 | Click buttons on badge
+                        <button id="config-refresh" class="ctrl-btn" title="Re-read configs from MicroPython">↻</button>
+                    </div>
+                    <div id="config-body">
+                        <div class="config-placeholder">Waiting for badge firmware to boot…</div>
+                    </div>
+                    <div id="config-actions">
+                        <button id="config-flash" class="ctrl-btn" title="Flash all config JSON files to a connected badge over USB (Web Serial)" disabled>Flash Configs to Badge</button>
+                    </div>
+                    <div id="config-status"></div>
                 </div>
             </div>
 
@@ -160,6 +181,6 @@
         </div>
     </div>
 
-    <script type="module" src="js/main.js?v=19"></script>
+    <script type="module" src="js/main.js?v=21"></script>
 </body>
 </html>

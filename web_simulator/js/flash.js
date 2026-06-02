@@ -9,6 +9,8 @@
 const SUPPORTED = typeof navigator !== 'undefined' && 'serial' in navigator;
 const BAUD = 115200;
 
+export function flashSupported() { return SUPPORTED; }
+
 // MicroPython REPL control bytes.
 const CTRL_A = 0x01; // enter raw REPL
 const CTRL_B = 0x02; // leave raw REPL
@@ -46,7 +48,7 @@ export function initFlash({ getModifiedFiles, getAllFiles, addLog }) {
     });
 }
 
-async function runFlash({ label, getFiles, addLog, buttons }) {
+export async function runFlash({ label, getFiles, addLog, buttons }) {
     if (busy) return;
     busy = true;
     buttons.forEach(b => { b.disabled = true; });

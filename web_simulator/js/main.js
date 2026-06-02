@@ -5,7 +5,8 @@ import { initControls } from './controls.js';
 import { registerBridge } from './bridge.js';
 import { registerEditorBridge } from './editor_bridge.js';
 import { initEditor, getModifiedFiles, getAllFiles } from './editor.js?v=16';
-import { initFlash } from './flash.js?v=16';
+import { initFlash } from './flash.js?v=17';
+import { initTabs, initConfigPanel } from './config_panel.js?v=2';
 
 const logContent = document.getElementById('log-content');
 const logToggle = document.getElementById('log-toggle');
@@ -118,6 +119,7 @@ async function boot() {
     initLeds();
     initButtons(addLog);
     initControls(addLog);
+    initTabs();
 
     addLog('Hardware UI initialized', 'INFO');
 
@@ -226,6 +228,12 @@ except Exception as e:
         } catch(e) {
             addLog(`Controller error: ${e.message}`, 'ERROR');
         }
+
+        // Config panel needs the live `controller` object — defer until after
+        // the controller-start block above has run.
+        initConfigPanel({ mp, addLog }).catch((err) => {
+            addLog(`Config panel init failed: ${err.message}`, 'WARNING');
+        });
 
         setStatus('Badge running', 'ready');
     } catch (err) {

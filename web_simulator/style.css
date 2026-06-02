@@ -158,6 +158,84 @@ html, body {
     padding-bottom: 6px;
 }
 
+#control-tabs {
+    display: flex;
+    border-bottom: 1px solid #444;
+    margin-bottom: 12px;
+}
+.ctrl-tab {
+    flex: 1;
+    padding: 8px;
+    background: transparent;
+    color: #999;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: inherit;
+}
+.ctrl-tab:hover { color: #ddd; }
+.ctrl-tab.active { color: #fff; border-bottom-color: #4af; }
+.ctrl-tab-content { display: none; }
+.ctrl-tab-content.active { display: block; }
+
+#config-toolbar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+#config-toolbar select { flex: 1; }
+#config-toolbar .ctrl-btn { width: auto; padding: 4px 10px; flex: 0 0 auto; }
+
+#config-body { font-size: 12px; }
+#config-body .config-placeholder { color: #888; font-style: italic; padding: 12px 0; }
+#config-body .config-row { margin-bottom: 12px; }
+#config-body .config-row > label {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 4px;
+    font-size: 12px;
+    color: #ddd;
+}
+#config-body .config-row .val {
+    color: #8cf;
+    font-family: 'Consolas', monospace;
+    font-size: 11px;
+}
+#config-body .config-row input[type="range"] { width: 100%; accent-color: #4af; }
+#config-body .config-row input[type="text"],
+#config-body .config-row input[type="number"] {
+    width: 100%;
+    padding: 4px 6px;
+    background: #333;
+    color: #ddd;
+    border: 1px solid #555;
+    border-radius: 3px;
+    font-size: 12px;
+    font-family: inherit;
+    box-sizing: border-box;
+}
+#config-body .config-row select { width: 100%; }
+
+#config-actions {
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid #333;
+}
+#config-flash:disabled { opacity: 0.5; cursor: not-allowed; }
+#config-flash.unsupported { opacity: 0.5; cursor: help; }
+
+#config-status {
+    font-size: 11px;
+    color: #888;
+    min-height: 14px;
+    margin-top: 8px;
+}
+#config-status.error { color: #f66; }
+#config-status.ok { color: #6f6; }
+
 #control-panel section {
     margin-bottom: 14px;
 }
