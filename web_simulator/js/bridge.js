@@ -77,6 +77,20 @@ export function registerBridge(globalObj) {
         markDirty(displayId);
     }, undefined);
 
+    // Zero-copy blit: Python passes the buffer's address in WASM linear memory
+    // plus its length, and we view it directly via Module.HEAPU8. This avoids
+    // copying the framebuffer into a JS Uint8Array one byte at a time across the
+    // proxy boundary (115k+ ASYNCIFY-bridged ops for a full-screen blit), which
+    // was slow enough to keep the bridge busy and abort the runtime on apps that
+    // blit every frame. The view is read synchronously here, before any GC can
+    // move the buffer, so it's safe. HEAPU8 is re-read each call because the
+    // heap can be replaced when WASM memory grows.
+    globalObj.bridgeDisplayBlitBufferPtr = guardedCall(function(displayId, addr, len, x, y, width, height) {
+        const view = globalThis.Module.HEAPU8.subarray(addr, addr + len);
+        displayBlitBuffer(displayId, view, x, y, width, height);
+        markDirty(displayId);
+    }, undefined);
+
     globalObj.bridgeDisplayText = guardedCall(function(displayId, text, x, y, fgColor, bgColor, charWidth, charHeight, fontName) {
         displayText(displayId, text, x, y, fgColor, bgColor, charWidth, charHeight, fontName);
         markDirty(displayId);

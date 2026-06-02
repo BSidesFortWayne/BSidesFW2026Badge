@@ -115,18 +115,7 @@ def send_jpg(display, filename, x, y):
     return 0, None
 
 
-def _bytes_to_js(buffer):
-    if isinstance(buffer, memoryview):
-        buf_bytes = bytes(buffer)
-    elif isinstance(buffer, (bytes, bytearray)):
-        buf_bytes = buffer
-    else:
-        buf_bytes = bytes(buffer)
-    from js import Uint8Array
-    js_buf = Uint8Array.new(len(buf_bytes))
-    for i in range(len(buf_bytes)):
-        js_buf[i] = buf_bytes[i]
-    return js_buf
+import uctypes
 
 
 def send_blit_buffer(display, buffer, x, y, width, height):
@@ -135,8 +124,17 @@ def send_blit_buffer(display, buffer, x, y, width, height):
         return 0, None
     _in_js_call = True
     try:
-        js_buf = _bytes_to_js(buffer)
-        js.bridgeDisplayBlitBuffer(display, js_buf, x, y, width, height)
+        # Zero-copy: hand JS the buffer's address in WASM linear memory and its
+        # length, and let it view the bytes directly via Module.HEAPU8. Copying
+        # byte-by-byte across the proxy boundary (one js_buf[i]=... per byte) is
+        # ~115k ASYNCIFY-bridged ops for a full-screen blit — slow enough that an
+        # app blitting every frame keeps the bridge busy and aborts the runtime.
+        # The view is read synchronously on the JS side before any GC moves the
+        # buffer, so it's safe.
+        js.bridgeDisplayBlitBufferPtr(
+            display, uctypes.addressof(buffer), len(buffer),
+            x, y, width, height,
+        )
     finally:
         _in_js_call = False
     return 0, None

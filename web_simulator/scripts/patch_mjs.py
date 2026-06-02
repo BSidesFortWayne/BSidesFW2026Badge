@@ -19,9 +19,22 @@ def patch(mjs_path):
     with open(mjs_path, 'r', encoding='utf-8') as f:
         content = f.read()
 
-    # Check if already patched
+    # Bump the ASYNCIFY stack size. The emscripten default (4096 bytes) is far
+    # too small for our workload — the asyncio event loop + interrupt polling +
+    # js.* proxy calls produce nested ASYNCIFY unwinds that overflow it and
+    # abort the runtime at random with "RuntimeError: unreachable". The stack is
+    # malloc'd at runtime from this JS-glue constant, so changing it here is
+    # equivalent to building with -sASYNCIFY_STACK_SIZE. Idempotent.
+    content, n_stack = re.subn(r'StackSize:\s*\d+,', 'StackSize:131072,', content)
+    if n_stack:
+        print(f"  Set ASYNCIFY StackSize to 131072 ({n_stack} site)")
+
+    # proxy_call_python may already be patched from a previous run; the
+    # StackSize bump above still needs to be (re)written, so don't bail early.
     if 'ASYNC_PATCHED' in content:
-        print(f"  Already patched: {mjs_path}")
+        with open(mjs_path, 'w', encoding='utf-8') as f:
+            f.write(content)
+        print(f"  proxy_call_python already patched: {mjs_path}")
         return
 
     # Find and replace the entire proxy_call_python function.

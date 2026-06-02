@@ -15,6 +15,37 @@ running app, picking up the new constructor.
 import sys
 
 
+def _materialise_module(module_path, source):
+    """Create a brand-new (non-frozen) module on the filesystem and import it.
+
+    MicroPython finds a submodule `pkg.leaf` only by looking in `pkg.__path__`,
+    so we write `source` to `/<pkg>/leaf.py` and point the parent package's
+    __path__ at that directory before importing. The fs copies of bundled apps
+    are identical to the frozen ones, so redirecting __path__ is safe.
+    """
+    if "." in module_path:
+        parent, leaf = module_path.rsplit(".", 1)
+        base = "/" + parent.replace(".", "/")
+    else:
+        parent, leaf, base = "", module_path, ""
+
+    # Ensure the parent directory exists (best-effort; usually already does).
+    if base:
+        try:
+            import os
+            os.mkdir(base)
+        except OSError:
+            pass
+
+    with open((base + "/" if base else "/") + leaf + ".py", "w") as f:
+        f.write(source)
+
+    if parent:
+        __import__(parent)
+        sys.modules[parent].__path__ = base
+    __import__(module_path)
+
+
 def swap(module_path, source):
     """Replace `module_path` (e.g. 'apps.menu') with `source` (str).
 
@@ -29,7 +60,15 @@ def swap(module_path, source):
     Returns the (mutated) module object.
     """
     if module_path not in sys.modules:
-        __import__(module_path)
+        try:
+            __import__(module_path)
+        except ImportError:
+            # Brand-new module: not frozen, never imported. MicroPython can't
+            # synthesise a module object, and it resolves submodules only via
+            # the parent package's __path__ (it does NOT scan sys.path), so we
+            # materialise the source as a real file under the parent package's
+            # filesystem dir and import it from there.
+            _materialise_module(module_path, source)
     mod = sys.modules[module_path]
 
     # Mark the file path so tracebacks point at the overlay.

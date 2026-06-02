@@ -2,11 +2,11 @@ import { initDisplays, flushAllDisplays } from './display.js';
 import { initLeds } from './leds.js';
 import { initButtons } from './buttons.js';
 import { initControls } from './controls.js';
-import { registerBridge } from './bridge.js';
-import { registerEditorBridge } from './editor_bridge.js';
+import { registerBridge } from './bridge.js?v=2';
+import { registerEditorBridge } from './editor_bridge.js?v=3';
 import { initEditor, getModifiedFiles, getAllFiles } from './editor.js?v=16';
 import { initFlash } from './flash.js?v=17';
-import { initTabs, initConfigPanel } from './config_panel.js?v=2';
+import { initTabs, initConfigPanel, getPersistedConfigs } from './config_panel.js?v=5';
 
 const logContent = document.getElementById('log-content');
 const logToggle = document.getElementById('log-toggle');
@@ -142,7 +142,7 @@ async function boot() {
     setStatus('Loading MicroPython WASM...');
 
     try {
-        const { loadMicroPython } = await import('../build/micropython.mjs?v=11');
+        const { loadMicroPython } = await import('../build/micropython.mjs?v=12');
         addLog('MicroPython module loaded, initializing...', 'INFO');
 
         const mp = await loadMicroPython({
@@ -162,6 +162,17 @@ async function boot() {
 
         // Load asset files into Emscripten filesystem
         await loadAssets(mp);
+
+        // Mirror the editor's created/edited files (localStorage) into MEMFS so
+        // a full page reload boots with them, the same way a real badge
+        // filesystem would — otherwise brand-new apps live only in the editor
+        // and vanish on reload.
+        await applyEditorOverlays(mp);
+
+        // Same idea for config changes made via the config panel: re-apply the
+        // persisted config JSON over the bundled defaults before the controller
+        // (and its SystemConfig / app configs) loads them.
+        applyPersistedConfigs(mp);
 
         // Register the editor bridge now that `mp` exists. The editor UI was
         // initialised earlier (without an `mp` ref) — applyOverlay() will
@@ -199,6 +210,44 @@ print(f'[BOOT] Display 1 id: {displays.display1.display}, Display 2 id: {display
             addLog(`Boot error: ${e.message}`, 'ERROR');
         }
 
+        // Patch the frozen display blit path to be zero-copy. The shipped
+        // emulator.send_blit_buffer copies the framebuffer into a JS Uint8Array
+        // one byte at a time (115k+ proxy ops for a 240x240 blit); for an app
+        // that blits every frame this keeps the js bridge saturated and the
+        // runtime aborts ("proxy_c_to_js_call is running asynchronously" /
+        // ASYNCIFY). Instead, hand JS the buffer's WASM heap address + length
+        // and let it view the bytes directly (see bridgeDisplayBlitBufferPtr).
+        try {
+            await mp.runPythonAsync(`
+try:
+    import emulator as _emu
+    import uctypes as _uctypes
+    import js as _js
+
+    def _fast_send_blit_buffer(display, buffer, x, y, width, height):
+        # Honour the existing re-entrancy guard (same module global the other
+        # send_* helpers use) so overlapping calls are dropped, not aborted.
+        if _emu._in_js_call:
+            return 0, None
+        _emu._in_js_call = True
+        try:
+            _js.bridgeDisplayBlitBufferPtr(
+                display, _uctypes.addressof(buffer), len(buffer),
+                x, y, width, height,
+            )
+        finally:
+            _emu._in_js_call = False
+        return 0, None
+
+    _emu.send_blit_buffer = _fast_send_blit_buffer
+    print('[BOOT] Installed zero-copy blit_buffer')
+except Exception as _e:
+    print('[BOOT] Could not install zero-copy blit:', _e)
+`);
+        } catch(e) {
+            addLog(`Blit patch error: ${e.message}`, 'WARNING');
+        }
+
         addLog('Starting controller...', 'INFO');
         try {
             await mp.runPythonAsync(`
@@ -209,6 +258,13 @@ try:
         import asyncio
     except ImportError:
         import uasyncio as asyncio
+
+    # Make editor-created apps (mirrored into MEMFS at boot) discoverable by the
+    # AppDirectory scan. MicroPython resolves a submodule only via its parent
+    # package's __path__, so point apps at the MEMFS dir. Bundled apps still
+    # resolve (their fs copies are identical to the frozen ones).
+    import apps
+    apps.__path__ = '/apps'
 
     controller = Controller(displays)
 
@@ -241,6 +297,49 @@ except Exception as e:
         addLog('Running in demo mode (no WASM binary found)', 'WARNING');
         setStatus('Demo mode - WASM not loaded', 'error');
         runDemoMode();
+    }
+}
+
+// Write a list of [{ path, content }] into MEMFS, creating missing parent dirs.
+function writeFilesToFs(mp, files) {
+    for (const { path, content } of files) {
+        const full = '/' + path;
+        const parts = full.split('/');
+        let dir = '';
+        for (let i = 1; i < parts.length - 1; i++) {
+            dir += '/' + parts[i];
+            try { mp.FS.mkdir(dir); } catch (_) {}
+        }
+        mp.FS.writeFile(full, content);
+    }
+}
+
+// Write the editor's modified/created files (from localStorage) into MEMFS.
+// Runs at boot so a full page reload picks up brand-new apps the same way
+// `loadAssets` picks up bundled ones.
+async function applyEditorOverlays(mp) {
+    try {
+        const files = await getModifiedFiles();   // [{ path, content }]
+        writeFilesToFs(mp, files);
+        if (files.length) {
+            addLog(`Applied ${files.length} editor file(s) to filesystem`, 'INFO');
+        }
+    } catch (e) {
+        addLog(`Editor overlay apply failed: ${e.message}`, 'WARNING');
+    }
+}
+
+// Re-apply config-panel changes (persisted in localStorage) over the bundled
+// config defaults, so config edits survive a full page reload.
+function applyPersistedConfigs(mp) {
+    try {
+        const files = getPersistedConfigs();      // [{ path, content }]
+        writeFilesToFs(mp, files);
+        if (files.length) {
+            addLog(`Applied ${files.length} saved config file(s) to filesystem`, 'INFO');
+        }
+    } catch (e) {
+        addLog(`Config persistence apply failed: ${e.message}`, 'WARNING');
     }
 }
 

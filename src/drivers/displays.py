@@ -86,7 +86,7 @@ class Displays(Driver):
         self.display2.init()
 
         self.display1.jpg('/img/bsides_logo.jpg', 0, 0, gc9a01.FAST)
-        self.display2.jpg('/img/gigtel_logo.jpg', 0, 0, gc9a01.FAST)
+        self.display2.jpg('/img/arista_logo.jpg', 0, 0, gc9a01.FAST)
 
     @staticmethod
     def rgb_to_565(r: int, g: int, b: int):
