@@ -19,12 +19,18 @@ const CONFIG_STORE_PREFIX = 'badge_sim_config:';
 // so changes survive a full page reload.
 export function getPersistedConfigs() {
     const out = [];
+    const bad = [];
     for (let i = 0; i < localStorage.length; i++) {
         const k = localStorage.key(i);
-        if (k && k.startsWith(CONFIG_STORE_PREFIX)) {
-            out.push({ path: k.slice(CONFIG_STORE_PREFIX.length), content: localStorage.getItem(k) });
-        }
+        if (!k || !k.startsWith(CONFIG_STORE_PREFIX)) continue;
+        const content = localStorage.getItem(k);
+        // Drop any entry that isn't valid JSON — e.g. a file written by the old
+        // buggy Config.save that emitted a dict-subclass repr. Re-applying it
+        // would just make the firmware's load() fail and revert to defaults.
+        try { JSON.parse(content); } catch (_) { bad.push(k); continue; }
+        out.push({ path: k.slice(CONFIG_STORE_PREFIX.length), content });
     }
+    for (const k of bad) { try { localStorage.removeItem(k); } catch (_) {} }
     return out;
 }
 
@@ -191,7 +197,10 @@ function buildRow(scopeKey, key, value) {
 
     if (value && typeof value === 'object' && 'type' in value) {
         const t = value.type;
-        if (t === 'RangeConfig' || t === 'ColorConfig') {
+        if (t === 'ColorConfig') {
+            return buildColorRow(row, scopeKey, key, value);
+        }
+        if (t === 'RangeConfig') {
             return buildRangeRow(row, scopeKey, key, value);
         }
         if (t === 'EnumConfig' || t === 'BoolDropdownConfig') {
@@ -213,6 +222,57 @@ function buildRow(scopeKey, key, value) {
         return buildBoolRow(row, scopeKey, key, value);
     }
     return buildTextRow(row, scopeKey, key, value);
+}
+
+// ColorConfig values are stored in the firmware's pre-swapped RGB565 form
+// (see drivers/displays.rgb_to_565 and ui/theme._swap): framebuf saves the
+// uint16 little-endian and the panel reads it big-endian, so a directly-drawn
+// color is byte-swapped relative to standard RGB565. These two helpers mirror
+// rgb_to_565 exactly, so a colour picked here renders as that colour.
+function hexToRgb565(hex) {
+    const m = /^#?([0-9a-fA-F]{6})$/.exec(hex || '');
+    if (!m) return 0;
+    const n = parseInt(m[1], 16);
+    const r = (n >> 16) & 0xFF, g = (n >> 8) & 0xFF, b = n & 0xFF;
+    return (r & 0xF8) | ((g & 0xE0) >> 5) | ((g & 0x1C) << 11) | ((b & 0xF8) << 5);
+}
+
+function rgb565ToHex(v) {
+    v &= 0xFFFF;
+    let r = v & 0xF8;
+    let g = ((v & 0x07) << 5) | ((v & 0xE000) >> 11);
+    let b = (v & 0x1F00) >> 5;
+    r |= r >> 5;   // replicate high bits into the low bits for a fuller 8-bit value
+    g |= g >> 6;
+    b |= b >> 5;
+    return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+}
+
+function buildColorRow(row, scopeKey, key, cfg) {
+    const labelEl = document.createElement('label');
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = cfg.name || key;
+    const valSpan = document.createElement('span');
+    valSpan.className = 'val';
+    labelEl.appendChild(nameSpan);
+    labelEl.appendChild(valSpan);
+
+    const input = document.createElement('input');
+    input.type = 'color';
+    input.value = rgb565ToHex(cfg.current);
+    valSpan.textContent = input.value;
+
+    input.addEventListener('input', () => {
+        valSpan.textContent = input.value;
+        scheduleUpdate(scopeKey, key, hexToRgb565(input.value), 250);
+    });
+    input.addEventListener('change', () => {
+        scheduleUpdate(scopeKey, key, hexToRgb565(input.value), 0);
+    });
+
+    row.appendChild(labelEl);
+    row.appendChild(input);
+    return row;
 }
 
 function buildRangeRow(row, scopeKey, key, cfg) {
@@ -303,10 +363,17 @@ function buildTextRow(row, scopeKey, key, value) {
     const input = document.createElement('input');
     input.type = typeof value === 'number' ? 'number' : 'text';
     input.value = value == null ? '' : String(value);
-    input.addEventListener('change', () => {
+    const commit = (debounceMs) => {
+        if (input.type === 'number' && input.value === '') return; // mid-edit
         const v = input.type === 'number' ? Number(input.value) : input.value;
-        scheduleUpdate(scopeKey, key, v, 0);
-    });
+        if (input.type === 'number' && Number.isNaN(v)) return;
+        scheduleUpdate(scopeKey, key, v, debounceMs);
+    };
+    // Apply on commit (blur/Enter) immediately, and also live-as-you-type
+    // (debounced) so changes take effect without needing to leave the field —
+    // matching the slider rows.
+    input.addEventListener('change', () => commit(0));
+    input.addEventListener('input', () => commit(400));
 
     row.appendChild(labelEl);
     row.appendChild(input);
@@ -334,6 +401,7 @@ async function applyUpdate(scopeKey, key, value) {
 _upd_err = None
 _upd_file = None
 _upd_content = None
+_upd_action = 'saved'
 try:
     _scope = ${JSON.stringify(scopeKey)}
     _key = ${JSON.stringify(key)}
@@ -363,9 +431,13 @@ try:
     # the app that's currently on screen, restart it on the event loop so its
     # __init__ re-reads the (now saved) config and redraws. Scheduling a task
     # avoids a re-entrant ASYNCIFY unwind here (switch_app is async).
-    if _scope.startswith('app:') and controller.current_view is not None:
+    if _scope.startswith('app:'):
         _aname = _scope[4:]
-        if getattr(type(controller.current_view), 'name', None) == _aname:
+        _cur = controller.current_view
+        _cur_name = getattr(type(_cur), 'name', None) if _cur is not None else None
+        if _cur_name == _aname:
+            _upd_action = 'restarting'
+            print('[config] %r is on screen; restarting it to apply %r' % (_aname, _key))
             try:
                 import asyncio as _aio
             except ImportError:
@@ -373,10 +445,16 @@ try:
             async def _cfg_restart(_n=_aname):
                 try:
                     await controller.switch_app(_n)
+                    print('[config] restarted %r' % _n)
                 except BaseException as _re:
+                    print('[config] restart of %r FAILED:' % _n)
                     import sys as _sys
                     _sys.print_exception(_re)
             _aio.create_task(_cfg_restart())
+        else:
+            _upd_action = 'inactive'
+            print('[config] saved %r for %r (current view is %r); open it to see changes'
+                  % (_key, _aname, _cur_name))
 except BaseException as _e:
     _upd_err = '%s: %s' % (type(_e).__name__, _e)
 `;
@@ -406,7 +484,14 @@ except BaseException as _e:
         } else if (scope) {
             scope[key] = value;
         }
-        setStatus(`Saved ${scopeKey}.${key}.`, 'ok');
+        const action = main._upd_action;
+        let msg = `Saved ${scopeKey}.${key}.`;
+        if (action === 'restarting') {
+            msg = `Saved — restarting ${scopeKey.slice(4)} to apply.`;
+        } else if (action === 'inactive') {
+            msg = `Saved — open ${scopeKey.slice(4)} to see the change.`;
+        }
+        setStatus(msg, 'ok');
     } catch (e) {
         setStatus(`${key}: ${errToStr(e)}`, 'error');
     }

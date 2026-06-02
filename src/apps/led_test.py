@@ -10,7 +10,7 @@ class LEDTest(BaseApp):
     """Test app to visualize LEDs in the simulator"""
     name = "LED Test"
     
-    def setup(self):
+    async def setup(self):
         self.leds = neopixel.NeoPixel(Pin(26), 7)
         self.mode = 0  # 0=rainbow, 1=pulse, 2=chase, 3=random
         self.frame = 0
@@ -98,7 +98,7 @@ class LEDTest(BaseApp):
         elif button == 3:  # Button 4 - Random
             self.mode = 3
     
-    def teardown(self):
+    async def teardown(self):
         # Turn off all LEDs
         for i in range(7):
             self.leds[i] = (0, 0, 0)

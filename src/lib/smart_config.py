@@ -84,7 +84,10 @@ class RangeConfig(SmartConfigValue):
 
 
 class ColorConfig(RangeConfig):
-    def __init__(self, name: str, current = None):
+    def __init__(self, name: str, current = None, **kwargs):
+        # **kwargs absorbs the inherited min/max/step fields that are present
+        # in a ColorConfig's saved JSON, so Config.load() can reconstruct it via
+        # ColorConfig(**value) without a "unexpected keyword argument" error.
         super().__init__(name, 0, 0xFFFF, current)
 
 
@@ -205,20 +208,31 @@ class Config(dict):
             print(e)
             print("Error loading config file")
 
+    def _serializable(self):
+        # MicroPython's json doesn't serialize dict *subclasses*
+        # (SmartConfigValue / RangeConfig / ColorConfig / ...) as objects — it
+        # falls back to their repr, which produces invalid JSON. Recursively
+        # flatten any dict (including subclasses) to a plain dict first.
+        def conv(o):
+            if isinstance(o, dict):
+                return {k: conv(v) for k, v in o.items()}
+            if isinstance(o, (list, tuple)):
+                return [conv(v) for v in o]
+            return o
+        return conv(self)
+
     def save(self):
         print(f"Saving smart config to {self.filename}")
+        data = json.dumps(self._serializable())
         # Make sure the file exists
         try:
             with open(self.filename, "w") as f:
-                data = json.dumps(self)
-                print("Data to save:", data)
-                json.dump(self, f)
+                f.write(data)
         except OSError:
-            pass # likely no file found, this isn't an issue right now
-            # Make the file
+            # likely the directory doesn't exist yet
             os.mkdir("/".join(self.filename.split("/")[:-1]))
             with open(self.filename, "w") as f:
-                json.dump(self, f)
+                f.write(data)
 
 
     def __setitem__(self, key, value):

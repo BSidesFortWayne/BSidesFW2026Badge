@@ -19,6 +19,17 @@ from services.sleep_service import SleepService
 from services.wifi_service import WiFiService
 
 
+async def _maybe_await(result):
+    """Await `result` if it's a coroutine, otherwise return it as-is.
+
+    Lets switch_app call an app's setup()/teardown() whether they're declared
+    `async def` or as plain methods — a plain method returns None, and
+    `await None` would otherwise raise "'NoneType' object isn't iterable".
+    """
+    if hasattr(result, "send"):
+        return await result
+    return result
+
 
 class Controller(IController):
     def __init__(self, displays, start_app_on_launch: bool = True):
@@ -303,7 +314,7 @@ class Controller(IController):
 
         if self.current_view:
             print("teardown current view")
-            await self.current_view.teardown()
+            await _maybe_await(self.current_view.teardown())
 
         print("Starting attempt to lock")
         async with self.current_app_lock:
@@ -312,7 +323,7 @@ class Controller(IController):
             self.current_view = app.constructor(self)
         
         print(f"Calling {app_name} app setup function")
-        await self.current_view.setup()
+        await _maybe_await(self.current_view.setup())
 
         print("Done with app switch")
         

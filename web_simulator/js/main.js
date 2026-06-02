@@ -6,7 +6,7 @@ import { registerBridge } from './bridge.js?v=2';
 import { registerEditorBridge } from './editor_bridge.js?v=3';
 import { initEditor, getModifiedFiles, getAllFiles } from './editor.js?v=16';
 import { initFlash } from './flash.js?v=17';
-import { initTabs, initConfigPanel, getPersistedConfigs } from './config_panel.js?v=5';
+import { initTabs, initConfigPanel, getPersistedConfigs } from './config_panel.js?v=8';
 
 const logContent = document.getElementById('log-content');
 const logToggle = document.getElementById('log-toggle');
@@ -246,6 +246,123 @@ except Exception as _e:
 `);
         } catch(e) {
             addLog(`Blit patch error: ${e.message}`, 'WARNING');
+        }
+
+        // Patch the frozen config (de)serialization. The shipped Config.save
+        // does json.dumps(self), but MicroPython's json doesn't serialize a
+        // dict *subclass* (SmartConfigValue / RangeConfig / ColorConfig) as an
+        // object — it emits the object's repr, producing INVALID JSON. The file
+        // then fails to parse on the next load ("syntax error in JSON") and the
+        // whole config silently reverts to defaults, so no change ever persists.
+        // Fix: flatten dict subclasses to plain dicts before dumping, and let
+        // ColorConfig accept the extra stored fields when reconstructed on load.
+        try {
+            await mp.runPythonAsync(`
+try:
+    import lib.smart_config as _sc
+    import json as _cfgjson
+    import os as _cfgos
+
+    def _cfg_ser(o):
+        if isinstance(o, dict):
+            return {k: _cfg_ser(v) for k, v in o.items()}
+        if isinstance(o, (list, tuple)):
+            return [_cfg_ser(v) for v in o]
+        return o
+
+    def _cfg_save(self):
+        _data = _cfgjson.dumps(_cfg_ser(self))
+        try:
+            with open(self.filename, 'w') as _f:
+                _f.write(_data)
+        except OSError:
+            try:
+                _cfgos.mkdir('/'.join(self.filename.split('/')[:-1]))
+            except OSError:
+                pass
+            with open(self.filename, 'w') as _f:
+                _f.write(_data)
+
+    _sc.Config.save = _cfg_save
+
+    # ColorConfig stores min/max/step but __init__ only takes (name, current);
+    # tolerate the extra fields so it can be rebuilt from its saved JSON.
+    def _color_init(self, name, current=None, **kwargs):
+        _sc.RangeConfig.__init__(self, name, 0, 0xFFFF, current)
+    _sc.ColorConfig.__init__ = _color_init
+
+    print('[BOOT] Installed config JSON serialization fix')
+except Exception as _e:
+    print('[BOOT] Could not install config fix:', _e)
+`);
+        } catch(e) {
+            addLog(`Config patch error: ${e.message}`, 'WARNING');
+        }
+
+        // Make Controller.switch_app tolerant of apps whose setup()/teardown()
+        // are plain (non-async) methods. switch_app does \`await view.setup()\`
+        // and \`await view.teardown()\`; if those return None (a sync def),
+        // \`await None\` raises "TypeError: 'NoneType' object isn't iterable"
+        // and the app can't start or be exited (e.g. the LED Test app). This
+        // re-defines switch_app to await only actual coroutines.
+        try {
+            await mp.runPythonAsync(`
+try:
+    from controller import Controller as _Ctrl
+    import apps as _apps
+    import apps.app as _appsapp
+    try:
+        import asyncio as _aio2
+    except ImportError:
+        import uasyncio as _aio2
+
+    async def _maybe_await(_r):
+        if hasattr(_r, 'send'):   # coroutine/generator -> await it
+            return await _r
+        return _r                 # plain value (e.g. None) -> pass through
+
+    async def _tolerant_switch_app(self, app_name):
+        if not app_name:
+            print("No view provided")
+            return
+        app = self.app_directory.get_app_by_name(app_name)
+        if not app:
+            print("App %s not found" % app_name)
+            return
+        self.bsp.speaker.stop_song()
+        if not app.constructor:
+            module_name = app.module_name
+            print("Loading %s" % module_name)
+            __import__("apps." + module_name)
+            module = getattr(_apps, module_name, None)
+            if not module:
+                print("No module found")
+                return
+            for _n, _obj in module.__dict__.items():
+                if (isinstance(_obj, type)
+                        and issubclass(_obj, _appsapp.BaseApp)
+                        and _obj != _appsapp.BaseApp
+                        and _obj.name == app.friendly_name):
+                    app.constructor = _obj
+                    break
+        if not app.constructor:
+            print("App %s not found" % app_name)
+            return
+        if self.current_view:
+            await _maybe_await(self.current_view.teardown())
+        async with self.current_app_lock:
+            self.current_view = None
+            self.current_view = app.constructor(self)
+        await _maybe_await(self.current_view.setup())
+        await _aio2.sleep(0.01)
+
+    _Ctrl.switch_app = _tolerant_switch_app
+    print('[BOOT] Installed tolerant switch_app')
+except Exception as _e:
+    print('[BOOT] Could not install switch_app patch:', _e)
+`);
+        } catch(e) {
+            addLog(`switch_app patch error: ${e.message}`, 'WARNING');
         }
 
         addLog('Starting controller...', 'INFO');
