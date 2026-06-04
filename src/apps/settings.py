@@ -214,6 +214,8 @@ class App(BaseApp):
                 # Save the new app file
                 with open(f'apps/{app_name}.py', 'w') as f:
                     f.write(app_code)
+                
+                return Response.redirect('/add_app')
 
             @app.get('/config')
             async def config(request):
@@ -276,9 +278,14 @@ class App(BaseApp):
                         print(f"Updating {app} config: {config_name} = {value}")
                         self._update_config_value(existing_config, value)
 
-                # return Response.redirect('/config')
+                return Response.redirect('/config')
+            
+            print("Microdot: Starting web server on 192.168.4.1:80")
+            await app.start_server(host='0.0.0.0', port=80)
         except Exception as e:
             print(f"Error starting web server: {e}")
+            import traceback
+            traceback.print_exc()
             return
         
     def _update_config_value(self, existing_config, value):
