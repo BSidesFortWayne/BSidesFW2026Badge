@@ -1,0 +1,733 @@
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+    --board-scale: 1;
+    --board-w: 560px;
+    --board-h: 1060px;
+}
+
+html, body {
+    height: 100%;
+    overflow: hidden;
+    background: #1a1a1a;
+    color: #ddd;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    font-size: 14px;
+}
+
+#app {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+}
+
+/* ── Badge Area (left) ── */
+#badge-area {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 8px;
+    height: 100vh;
+}
+
+#board-container {
+    position: relative;
+    width: 560px;
+    height: 1060px;
+    transform-origin: top left;
+    overflow: visible;
+}
+
+#board-image {
+    width: 560px;
+    height: 1060px;
+    display: block;
+    user-select: none;
+    pointer-events: none;
+}
+
+/* Displays.
+ *
+ * The whole #board-container is `transform: scale(N)`'d down when the window
+ * is shorter than the badge's natural 1060px height. With `image-rendering:
+ * pixelated`, non-integer downscales drop source pixels — bitmap-font glyphs
+ * lose strokes and look "broken". `auto` lets the browser bilinear-filter
+ * during the transform, which is consistent at any scale (very slightly
+ * softer at 1:1 than nearest-neighbor would be, but the canvas internal
+ * resolution is unchanged so no detail is lost).
+ */
+#display1, #display2 {
+    position: absolute;
+    clip-path: circle(50%);
+    image-rendering: auto;
+}
+#display1 { left: 70px; top: 558px; }
+#display2 { left: 234px; top: 774px; }
+
+/* ── LED strip ── */
+#led-strip {
+    position: absolute;
+    left: 499px;
+    top: 175px;
+    transform: translateX(-50%);
+}
+
+.led {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.25);
+    transition: background-color 0.05s, box-shadow 0.05s;
+    margin-bottom: 84.7px;
+}
+
+.led.active {
+    border: none;
+}
+
+/* ── Button overlays ── */
+.btn-overlay {
+    position: absolute;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    background: rgba(100, 150, 255, 0.12);
+    border: 2px solid rgba(100, 150, 255, 0.35);
+    cursor: pointer;
+    transform: translate(-50%, -50%);
+    transition: background 0.1s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 9px;
+    font-weight: bold;
+    color: rgba(255,255,255,0.6);
+    line-height: 1.1;
+    user-select: none;
+}
+
+.btn-overlay.btn-large {
+    width: 40px;
+    height: 40px;
+    font-size: 10px;
+}
+
+.key-hint {
+    font-size: 8px;
+    opacity: 0.5;
+    font-weight: normal;
+}
+
+.btn-overlay:hover {
+    background: rgba(100, 150, 255, 0.3);
+    border-color: rgba(100, 150, 255, 0.6);
+}
+
+.btn-overlay.pressed {
+    background: rgba(0, 255, 0, 0.35);
+    border-color: rgba(0, 255, 0, 0.6);
+}
+
+/* ── Right Panel ── */
+#right-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 440px;
+    height: 100vh;
+    border-left: 1px solid #333;
+    overflow: hidden;
+}
+
+/* ── Control Panel ── */
+#control-panel {
+    flex: 1;
+    padding: 12px 16px;
+    background: #222;
+    overflow-y: auto;
+    min-height: 0;
+}
+
+#control-panel h2 {
+    font-size: 15px;
+    margin-bottom: 12px;
+    color: #fff;
+    border-bottom: 1px solid #444;
+    padding-bottom: 6px;
+}
+
+#control-tabs {
+    display: flex;
+    border-bottom: 1px solid #444;
+    margin-bottom: 12px;
+}
+.ctrl-tab {
+    flex: 1;
+    padding: 8px;
+    background: transparent;
+    color: #999;
+    border: none;
+    border-bottom: 2px solid transparent;
+    cursor: pointer;
+    font-size: 12px;
+    font-family: inherit;
+}
+.ctrl-tab:hover { color: #ddd; }
+.ctrl-tab.active { color: #fff; border-bottom-color: #4af; }
+.ctrl-tab-content { display: none; }
+.ctrl-tab-content.active { display: block; }
+
+#config-toolbar {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+#config-toolbar select { flex: 1; }
+#config-toolbar .ctrl-btn { width: auto; padding: 4px 10px; flex: 0 0 auto; }
+
+#config-body { font-size: 12px; }
+#config-body .config-placeholder { color: #888; font-style: italic; padding: 12px 0; }
+#config-body .config-row { margin-bottom: 12px; }
+#config-body .config-row > label {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 8px;
+    margin-bottom: 4px;
+    font-size: 12px;
+    color: #ddd;
+}
+#config-body .config-row .val {
+    color: #8cf;
+    font-family: 'Consolas', monospace;
+    font-size: 11px;
+}
+#config-body .config-row input[type="range"] { width: 100%; accent-color: #4af; }
+#config-body .config-row input[type="text"],
+#config-body .config-row input[type="number"] {
+    width: 100%;
+    padding: 4px 6px;
+    background: #333;
+    color: #ddd;
+    border: 1px solid #555;
+    border-radius: 3px;
+    font-size: 12px;
+    font-family: inherit;
+    box-sizing: border-box;
+}
+#config-body .config-row select { width: 100%; }
+
+#config-actions {
+    margin-top: 14px;
+    padding-top: 10px;
+    border-top: 1px solid #333;
+}
+#config-flash:disabled { opacity: 0.5; cursor: not-allowed; }
+#config-flash.unsupported { opacity: 0.5; cursor: help; }
+
+#config-status {
+    font-size: 11px;
+    color: #888;
+    min-height: 14px;
+    margin-top: 8px;
+}
+#config-status.error { color: #f66; }
+#config-status.ok { color: #6f6; }
+
+#control-panel section {
+    margin-bottom: 14px;
+}
+
+#control-panel h3 {
+    font-size: 11px;
+    color: #999;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+#control-panel label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 12px;
+}
+
+#control-panel input[type="range"] {
+    width: 100%;
+    margin-top: 3px;
+    accent-color: #4af;
+}
+
+#control-panel select {
+    width: 100%;
+    padding: 5px;
+    background: #333;
+    color: #ddd;
+    border: 1px solid #555;
+    border-radius: 3px;
+    font-size: 12px;
+}
+
+.controls-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.controls-row .half {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+.ctrl-btn {
+    width: 100%;
+    padding: 6px;
+    background: #3a3a3a;
+    color: #ddd;
+    border: 1px solid #555;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.15s;
+}
+.ctrl-btn:hover { background: #4a4a4a; }
+.ctrl-btn:active { background: #555; }
+
+#accel-display, #divided-voltage {
+    font-family: 'Consolas', monospace;
+    font-size: 11px;
+    color: #8cf;
+    padding: 3px 0;
+}
+
+#status-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 6px 8px;
+    background: #1a1a1a;
+    border-radius: 3px;
+    margin-bottom: 8px;
+}
+
+#fps-display {
+    font-family: 'Consolas', monospace;
+    font-size: 11px;
+    color: #888;
+}
+
+#status-text { color: #fa4; font-size: 12px; }
+#status-text.ready { color: #4f4; }
+#status-text.error { color: #f44; }
+
+#info-box {
+    font-size: 11px;
+    color: #666;
+    line-height: 1.5;
+    padding: 6px 8px;
+    background: #1a1a1a;
+    border-radius: 3px;
+}
+
+/* ── Log Panel ── */
+#log-panel {
+    flex: 0 0 200px;
+    background: #141414;
+    border-top: 1px solid #444;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    min-height: 35px;
+}
+
+#log-panel.collapsed {
+    flex: 0 0 35px;
+}
+
+#log-resize-handle {
+    height: 4px;
+    cursor: ns-resize;
+    background: transparent;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+}
+
+#log-resize-handle:hover {
+    background: #4af;
+}
+
+#log-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 10px;
+    background: #1e1e1e;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+}
+
+#log-header span { font-weight: bold; font-size: 12px; color: #aaa; }
+
+#log-header button {
+    background: #333;
+    color: #ccc;
+    border: 1px solid #555;
+    padding: 1px 8px;
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 11px;
+    margin-left: 6px;
+}
+#log-header button:hover { background: #444; }
+
+#log-content {
+    padding: 4px 10px;
+    overflow-y: auto;
+    flex: 1;
+    font-family: 'Consolas', 'Courier New', monospace;
+    font-size: 11px;
+    line-height: 1.3;
+}
+
+.log-entry { white-space: nowrap; }
+.log-entry.error { color: #ff6464; }
+.log-entry.warning { color: #ffc864; }
+.log-entry.info { color: #96c8ff; }
+
+/* ── Editor Panel ── */
+#editor-panel {
+    flex: 0 0 420px;
+    background: #1e1e1e;
+    border-top: 1px solid #444;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    min-height: 32px;
+    overflow: hidden;
+}
+
+#editor-panel.collapsed {
+    flex: 0 0 32px;
+}
+
+#editor-panel.collapsed #editor-host,
+#editor-panel.collapsed #editor-file,
+#editor-panel.collapsed .editor-actions > button:not(#editor-toggle) {
+    display: none;
+}
+
+#editor-resize-handle {
+    height: 4px;
+    cursor: ns-resize;
+    background: transparent;
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 10;
+}
+
+#editor-resize-handle:hover {
+    background: #4af;
+}
+
+#editor-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 8px;
+    background: #252525;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+    height: 32px;
+}
+
+#editor-header > span:first-child {
+    font-weight: bold;
+    font-size: 12px;
+    color: #aaa;
+    flex-shrink: 0;
+}
+
+#editor-dirty {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: transparent;
+    flex-shrink: 0;
+    transition: background 0.15s;
+}
+
+#editor-dirty.active {
+    background: #fc4;
+    box-shadow: 0 0 4px #fc4;
+}
+
+#editor-active-path {
+    flex: 1;
+    min-width: 0;
+    padding: 3px 5px;
+    color: #8af;
+    font-size: 11px;
+    font-family: 'Consolas', monospace;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.editor-actions {
+    display: flex;
+    gap: 4px;
+    flex-shrink: 0;
+}
+
+.editor-actions button {
+    background: #333;
+    color: #ccc;
+    border: 1px solid #555;
+    padding: 2px 8px;
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 11px;
+}
+.editor-actions button:hover { background: #444; }
+.editor-actions button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+#editor-reload {
+    background: #2d4a2d !important;
+    border-color: #4a7a4a !important;
+    color: #cfc !important;
+}
+#editor-reload:hover { background: #3d5a3d !important; }
+
+#editor-flash-modified, #editor-flash-all {
+    background: #4a3a2d !important;
+    border-color: #7a5a3a !important;
+    color: #fdc !important;
+}
+#editor-flash-modified:hover, #editor-flash-all:hover { background: #5a4630 !important; }
+#editor-flash-modified:disabled, #editor-flash-all:disabled {
+    background: #333 !important;
+    border-color: #555 !important;
+    color: #888 !important;
+}
+
+#editor-body {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+    overflow: hidden;
+}
+
+#editor-sidebar {
+    flex: 0 0 220px;
+    min-width: 120px;
+    max-width: 60%;
+    display: flex;
+    flex-direction: column;
+    background: #1a1a1a;
+    border-right: 1px solid #333;
+    overflow: hidden;
+}
+
+#editor-sidebar-toolbar {
+    display: flex;
+    gap: 3px;
+    padding: 3px;
+    background: #252525;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+}
+
+#editor-sidebar-toolbar button {
+    flex: 1;
+    background: #333;
+    color: #ccc;
+    border: 1px solid #555;
+    padding: 2px 4px;
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 11px;
+}
+
+#editor-sidebar-toolbar button:hover { background: #444; }
+
+#editor-sidebar-toolbar #editor-collapse-all {
+    flex: 0 0 28px;
+}
+
+#editor-sidebar-resize {
+    flex: 0 0 4px;
+    cursor: ew-resize;
+    background: transparent;
+}
+
+#editor-sidebar-resize:hover {
+    background: #4af;
+}
+
+#editor-tree {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 2px 0;
+    font-family: 'Consolas', monospace;
+    font-size: 12px;
+    user-select: none;
+}
+
+.tree-row {
+    display: flex;
+    align-items: center;
+    height: 20px;
+    padding-right: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+    color: #ccc;
+    position: relative;
+}
+
+.tree-row:hover {
+    background: #2a2a2a;
+}
+
+.tree-row.is-active {
+    background: #1e3a5f;
+    color: #fff;
+}
+
+.tree-row.is-selected:not(.is-active) {
+    background: #303030;
+}
+
+.tree-row.is-drop-target {
+    background: #2a4a2a !important;
+    outline: 1px dashed #6c6;
+    outline-offset: -1px;
+}
+
+.tree-row.is-dirty .tree-label::after {
+    content: ' \25CF';
+    color: #fc4;
+}
+
+.tree-row.is-created .tree-label {
+    color: #9c9;
+}
+
+.tree-row.is-edited .tree-label {
+    color: #fc8;
+}
+
+.tree-indent {
+    flex-shrink: 0;
+    display: inline-block;
+}
+
+.tree-caret {
+    flex-shrink: 0;
+    width: 14px;
+    text-align: center;
+    font-size: 10px;
+    color: #888;
+}
+
+.tree-icon {
+    flex-shrink: 0;
+    width: 14px;
+    text-align: center;
+    font-size: 11px;
+    color: #888;
+    margin-right: 3px;
+}
+
+.tree-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tree-actions {
+    display: none;
+    gap: 2px;
+    flex-shrink: 0;
+    margin-left: 4px;
+}
+
+.tree-row:hover .tree-actions {
+    display: inline-flex;
+}
+
+.tree-actions button {
+    background: transparent;
+    border: none;
+    color: #aaa;
+    cursor: pointer;
+    padding: 1px 4px;
+    font-size: 11px;
+    border-radius: 2px;
+}
+
+.tree-actions button:hover {
+    background: #444;
+    color: #fff;
+}
+
+.tree-actions button.danger:hover {
+    background: #722;
+    color: #fff;
+}
+
+.tree-rename-input {
+    flex: 1;
+    background: #222;
+    color: #fff;
+    border: 1px solid #4af;
+    border-radius: 2px;
+    padding: 1px 3px;
+    font-family: inherit;
+    font-size: inherit;
+    outline: none;
+}
+
+#editor-host {
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+}
+
+/* ── Mobile: badge-only fullscreen view ── */
+@media (max-width: 768px), (max-height: 500px) and (pointer: coarse) {
+    #right-panel {
+        display: none;
+    }
+
+    #app {
+        width: 100vw;
+    }
+
+    #badge-area {
+        flex: 1;
+        width: 100vw;
+        height: 100vh;
+        padding: 0;
+        align-items: center;
+        overflow: hidden;
+    }
+
+    #board-container {
+        transform-origin: center center;
+    }
+}

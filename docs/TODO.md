@@ -1,3 +1,9 @@
+# Simulator
+- [ ] Map buttons to more keyboard keys
+- [ ] Map on-screen clicks on buttons to button commands
+- [ ] Investigate rendering performance issue (especially tearing with button tester)
+- [ ] 
+
 # To Do List
 
 - Hardware
@@ -102,3 +108,23 @@
     - [ ] Scroll through selected images
   - [ ] Vendor sign off app
     - [ ] Crypto key
+
+
+
+
+## Last Push
+
+- [ ] Schedule app to show speaker schedule / room / time / description
+	- [ ] Already have menu-ish app, need selection?
+	- [ ] Performance issue?
+- [x] Badge customization behavior via option keys. Basically would toggle each screen through a few different layout/background options. It would let people customize their badge with what they want. For instance, if they just want first name/last name, they can set the second screen to the BSides logo
+	- [ ] Dave partially did, seems good enough
+- [ ] Some more fun apps. Examples could be optical illusions, my son asked me to make an app with a triangle optical illusion he wanted to show me and it was fun
+	- [ ] Probably not high priority? Could at least convert triangle app?
+	- [ ] LED fidget?
+- [ ] On board customizer menu based on smart config object
+	- [ ] Could be GREAT to do and could build on schedule menu...
+- [ ] Work on simulator. I know it would have been better to have pre conference but could still be fun to work on
+	- [ ] Unlikely this late
+- [ ] Add config object for Controller and Drivers for better device customization
+	- [ ] Could be sweet to add for driver config...

@@ -1,0 +1,16 @@
+# Auto-generated directories
+/src
+/logs
+
+# Auto-generated files
+*.log
+*.jsonl
+_boot_then_main.py
+.src_cache.json
+
+# Python bytecode
+__pycache__/
+*.pyc
+
+# Screenshot output
+screenshots/

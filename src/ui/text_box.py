@@ -2,39 +2,38 @@ import framebuf
 
 from lib.microfont import MicroFont
 from ui.widget import Widget
+from ui.theme import FG, FONT_BODY
 
 
 class TextBox(Widget):
-    def __init__(self, text: str = "", width: int = 0, height: int = 0, color='white', name: str = ''):
+    def __init__(self, text: str = "", width: int = 0, height: int = 0, color=FG, name: str = ''):
         super().__init__(name)
         self.text = text
         self.width = width
         self.height = height
+        self.color = color
         self.border = 0
-        # TODO make this normalized 
-        self.font = MicroFont("fonts/victor_R_24.mfnt", cache_index=True, cache_chars=True)
+        self.font = MicroFont(FONT_BODY, cache_index=True, cache_chars=True)
 
     def render(
-            self, 
+            self,
             x: int,
-            y: int, 
-            fbuf: framebuf.FrameBuffer, 
-            fbuf_width: int = 240, 
+            y: int,
+            fbuf: framebuf.FrameBuffer,
+            fbuf_width: int = 240,
             fbuf_height: int = 240
         ):
-        # Render the text box with the specified dimensions
         if self.border:
-            # Draw a border around the text box
-            fbuf.rect(x - 1, y - 1, self.width + 2, self.height + 2, 0xFFFF)
+            fbuf.rect(x - 1, y - 1, self.width + 2, self.height + 2, FG)
         width,height = self.font.write(
             self.text,
             fbuf,
-            framebuf.RGB565, 
-            fbuf_width, 
+            framebuf.RGB565,
+            fbuf_width,
             fbuf_height,
             x,
             y,
-            0xFFFF,
+            self.color,
         )
 
         return self.width or width, self.height or height

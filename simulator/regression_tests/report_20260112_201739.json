@@ -1,0 +1,20 @@
+{
+  "timestamp": "20260112_201739",
+  "mode": "test",
+  "config": "config.json",
+  "test_results": [
+    {
+      "sequence": "startup",
+      "step": 2,
+      "name": "startup_menu",
+      "success": false,
+      "result": "Command timeout"
+    }
+  ],
+  "comparison_results": {},
+  "summary": {
+    "total_captures": 1,
+    "successful_captures": 0,
+    "failed_captures": 1
+  }
+}

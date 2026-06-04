@@ -6,6 +6,18 @@ node_modules
 src/config/*.json
 src/config/**/*.json
 
+app_directory_cache.json
+
+# Simulator auto-generated files
+simulator/src/
+simulator/src/_boot_then_main.py
+simulator/.src_cache.json
+
+# .bin firmware files
+*.bin
+
+src_temp
+
 # Hide the CTF related files... :-) 
 src/apps/*ctf.py
 tests/test_ctf.py
@@ -188,3 +200,5 @@ cython_debug/
 
 # WiFi config
 /src/wifi.json
+
+.claude

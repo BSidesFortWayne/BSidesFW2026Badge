@@ -1,8 +1,8 @@
-from drivers.displays import rgb
 from ui.text_box import TextBox
 from ui.widget import Widget
 import framebuf
 from ui.common import Direction
+from ui.theme import FG, ACCENT
 
 class TableLayout(Widget):
     def __init__(
@@ -92,21 +92,21 @@ class TableLayout(Widget):
             for column_index,widget in enumerate(row):
                 if (row_index, column_index) == self.cell_highlight:
                     fbuf.rect(
-                        x, 
-                        y, 
-                        width + padding * 2, 
-                        height + padding * 2, 
-                        rgb((0, 100, 0)),  # Highlight color
-                        True  # Fill the rectangle
+                        x,
+                        y,
+                        width + padding * 2,
+                        height + padding * 2,
+                        ACCENT,
+                        True
                     )
                 width, height = widget.render(x + padding, y + padding, fbuf, fbuf_width, fbuf_height)
                 fbuf.rect(
-                    x, 
-                    y, 
-                    width + padding * 2, 
-                    height + padding * 2, 
-                    0xFFFF,  # Fill color
-                    False  # Fill the rectangle
+                    x,
+                    y,
+                    width + padding * 2,
+                    height + padding * 2,
+                    FG,
+                    False
                 )
                 x += width + self.spacing + padding * 2
             # y += self.row_height[row_index] + self.spacing

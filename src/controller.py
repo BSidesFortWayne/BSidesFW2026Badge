@@ -5,7 +5,6 @@ import random
 import time
 import os
 
-import machine
 from app_directory import AppDirectory, AppMetadata
 import apps.app
 from bsp import BSP
@@ -14,79 +13,23 @@ from icontroller import IController
 import lib.battery
 from drivers.displays import Displays
 import utime
-import esp32
-import micropython
-from drivers.audio import AUDIO_PLAYING, AUDIO_PAUSED, AUDIO_STOPPED
-from lib.smart_config import BoolDropdownConfig, Config
-from drivers.base import Driver
+from lib.smart_config import Config
+from lib.system_config import SystemConfig
+from services.sleep_service import SleepService
+from services.wifi_service import WiFiService
 
-class Sleep(Driver):
+
+async def _maybe_await(result):
+    """Await `result` if it's a coroutine, otherwise return it as-is.
+
+    Lets switch_app call an app's setup()/teardown() whether they're declared
+    `async def` or as plain methods — a plain method returns None, and
+    `await None` would otherwise raise "'NoneType' object isn't iterable".
     """
-    Handles everything related to the device sleeping. Saves and restores the state of different parts of the hardware while sleeping.
-    """
-    def __init__(self, bsp):
-        super().__init__()
-        print('Configuring sleep')
-        self.bsp = bsp
-        self.state_before_sleeping = {}
-        self.lis3dh_int2_pin = machine.Pin(34, machine.Pin.IN)
-        self.bsp.imu.set_tap(tap=1, threshold=100)
-        self.bsp.imu._write_register_byte(0x24, 0x28)
-        self.bsp.imu._write_register_byte(0x22, 0x00)
-        self.bsp.imu._write_register_byte(0x25, 0x80)
+    if hasattr(result, "send"):
+        return await result
+    return result
 
-        self.config.add('sleep_timeout_s', 120_000)
-        self.config.add('sleep_enabled', BoolDropdownConfig("Sleep Enabled", True))
-
-        # prevent the device from sleeping when pressing buttons
-        self.bsp.buttons.button_pressed_callbacks.append(self.shaken)
-
-        self.last_shaken = time.ticks_ms()
-        self.bsp.imu._read_register_byte(0x39)
-
-        self.lis3dh_int2_pin.irq(trigger=machine.Pin.IRQ_RISING, handler=self.shaken)
-        esp32.wake_on_ext0(self.lis3dh_int2_pin, esp32.WAKEUP_ANY_HIGH)
-
-        # machine.lightsleep cannot be called in a task
-        timer = machine.Timer(2)
-        timer.init(period=1000, mode=machine.Timer.PERIODIC,
-                callback=lambda t: micropython.schedule(self.update, 0))
-
-    def shaken(self, pin):
-        print('Board shaken, resetting time to sleep')
-        self.last_shaken = time.ticks_ms()
-        self.bsp.imu._read_register_byte(0x39)
-
-    def save_state(self):
-        self.state_before_sleeping['audio_state'] = self.bsp.speaker.state
-        self.state_before_sleeping['leds'] = list(self.bsp.leds.leds)
-    
-    def restore_state(self):
-        self.bsp.imu._read_register_byte(0x39) # irq latch
-        for led, color in enumerate(self.state_before_sleeping['leds']):
-            self.bsp.leds.leds[led] = color
-        self.bsp.leds.leds.write()
-        if self.state_before_sleeping['audio_state'] == AUDIO_PLAYING:
-            self.bsp.speaker.resume_song()
-        self.bsp.displays.disp_en.value(1)
-    
-    def sleep(self):
-        self.save_state()
-        self.bsp.leds.turn_off_all()
-        self.bsp.displays.disp_en.value(0)
-        if self.state_before_sleeping['audio_state'] == AUDIO_PLAYING:
-            self.bsp.speaker.pause_song()
-        
-        machine.lightsleep()
-
-    def update(self, _):
-        enabled = self.config['sleep_enabled']
-        if not enabled:
-            return
-        timeout = self.config['sleep_timeout_s']
-        if time.ticks_ms()-self.last_shaken >= timeout:
-            self.sleep()
-            self.restore_state()
 
 class Controller(IController):
     def __init__(self, displays, start_app_on_launch: bool = True):
@@ -95,6 +38,10 @@ class Controller(IController):
         
         super().__init__(HardwareRev.V3, displays)
 
+        # System-wide configuration
+        self.system_config = SystemConfig()
+        
+        # Controller-specific config (app selection, etc.)
         self.config = Config("config/controller.json")
         self.config.add('default_app', 'Badge')
         
@@ -103,7 +50,12 @@ class Controller(IController):
 
         self.battery = lib.battery.Battery(self)
 
+        # Config storage for apps and services
         self.app_configs: dict[str, Config] = {}
+        self.service_configs: dict[str, Config] = {}
+        
+        # Background services
+        self.services: list = []
 
         print("Callback handlers")
 
@@ -114,7 +66,7 @@ class Controller(IController):
             name_file = open('name.json')
             self.name = json.loads(name_file.read())
             name_file.close()
-        except Exception:
+        except OSError:
            print("Name file not found")
            self.name = {
                'first': "Bilbo",
@@ -141,7 +93,8 @@ class Controller(IController):
 
         self.reset_buttons_pressed = 0
 
-        self.sleep = Sleep(self.bsp)
+        # Initialize background services
+        self._initialize_services()
 
         print("Register buttons")
         self.bsp.buttons.button_pressed_callbacks.append(self.button_press)
@@ -153,23 +106,76 @@ class Controller(IController):
 
         if start_app_on_launch:
             asyncio.create_task(self.switch_app(self.config['default_app']))
+    
+    def _initialize_services(self):
+        """Initialize background services."""
+        print("Initializing background services")
+        
+        # Initialize WiFi service (should start before other network-dependent services)
+        self.wifi_service = WiFiService(self)
+        self.services.append(self.wifi_service)
+        
+        # Initialize sleep service
+        self.sleep_service = SleepService(self)
+        self.services.append(self.sleep_service)
+        
+        # Start all services
+        for service in self.services:
+            asyncio.create_task(service.start())
+    
+    async def start_services(self):
+        """Start all background services."""
+        for service in self.services:
+            if not service.is_running():
+                await service.start()
+    
+    async def stop_services(self):
+        """Stop all background services."""
+        for service in self.services:
+            if service.is_running():
+                await service.stop()
+    
+    def get_service_status(self) -> dict:
+        """Get status of all background services."""
+        return {
+            service.name: service.get_status()
+            for service in self.services
+        }
 
     async def run(self):
         total_times = 0
         total_counts = 0
+        
+        # Start services if not already started
+        await self.start_services()
+        
         while True:
             x = time.ticks_ms()
+            
+            # Update current app
             async with self.current_app_lock:
                 if self.current_view:
                     await self.current_view.update()
-                await asyncio.sleep(0.01)
-            d = time.ticks_diff(time.ticks_ms(), x)
-            total_times += d
-            total_counts += 1
-            if total_counts % 100 == 0:
-                average = total_times/total_counts
-                print(f"Average: {average} ms")
-                print(f"Average Hz: {int(1000/average)} Hz")
+            
+            # Update background services
+            for service in self.services:
+                if service.is_running():
+                    try:
+                        await service.update()
+                    except Exception as e:
+                        print(f"Error updating service {service.name}: {e}")
+            
+            await asyncio.sleep(0.01)
+            
+            # Performance monitoring (if enabled)
+            if self.system_config.is_performance_monitoring_enabled():
+                d = time.ticks_diff(time.ticks_ms(), x)
+                total_times += d
+                total_counts += 1
+                if total_counts % 100 == 0:
+                    average = total_times/total_counts
+                    print(f"Average: {average} ms")
+                    print(f"Average Hz: {int(1000/average)} Hz")
 
     def update_time(self, payload):
         if payload.startswith('time'):
@@ -189,7 +195,7 @@ class Controller(IController):
                 return
             try:
                 open('led_flag', 'r')
-            except:
+            except OSError:
                 pass
             else:
                 print('Lights triggered but flag exists')
@@ -308,7 +314,7 @@ class Controller(IController):
 
         if self.current_view:
             print("teardown current view")
-            await self.current_view.teardown()
+            await _maybe_await(self.current_view.teardown())
 
         print("Starting attempt to lock")
         async with self.current_app_lock:
@@ -317,7 +323,7 @@ class Controller(IController):
             self.current_view = app.constructor(self)
         
         print(f"Calling {app_name} app setup function")
-        await self.current_view.setup()
+        await _maybe_await(self.current_view.setup())
 
         print("Done with app switch")
         

@@ -1,5 +1,6 @@
 import time
 import gc
+import os
 
 from controller import Controller
 
@@ -18,4 +19,14 @@ async def main(displays):
 
 if __name__ == "__main__":
     import asyncio
+    
+    # displays global should be created by boot.py (both hardware and simulator)
+    # If it doesn't exist, create it as a fallback
+    try:
+        displays
+    except NameError:
+        print("Warning: displays not found from boot.py, creating fallback")
+        import drivers.displays
+        displays = drivers.displays.Displays()
+    
     asyncio.run(main(displays))

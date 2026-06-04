@@ -22,6 +22,22 @@ def fast_cos(angle): return fast_sin(angle+90)
 class MicroFont:
     def __init__(self,filename,cache_index = False, cache_chars = False):
         stream = open(filename,"rb")
+        if not stream:
+            raise OSError(f"Cannot open MicroFont file {filename}")
+
+        # If we got fileno 0, try again
+        # I have no idea why this works for the simulator, and it's concerning... but oh well
+        try:
+            # This function doesn't exist on the board
+            # My best theory right now is that in the simulator it is opening a FileIO
+            # But on the device it will open a BytesIO
+            # So once possible solution would be to just force the use of BytesIO on the simulator side
+            if stream.fileno() <= 0:  
+                stream = open(filename,"rb")
+        except:
+            pass
+        # print(stream.isatty())
+        # print(stream.tell())
         header_data = stream.read(12)
         if len(header_data) != 12:
             raise ValueError("Corrupted header for MFNT font file")
@@ -39,6 +55,21 @@ class MicroFont:
         self.index = None
         self.cache = {}
         self.stream = stream # We keep the file open for lower latecy.
+
+    def close(self):
+        """Close the font file stream."""
+        print("MicroFont close called")  # DEBUG LINE
+        if self.stream:
+            self.stream.close()
+            self.stream = None
+
+    def __del__(self):
+        """Cleanup: close the file stream when the object is garbage collected."""
+        print("MicroFont __del__ called")  # DEBUG LINE
+        try:
+            self.close()
+        except:
+            pass
 
     def height(self): return self.height
     def baseline(self): return self.baseline
@@ -62,8 +93,13 @@ class MicroFont:
     # Return the character bitmap (horizontally mapped, and horizontally
     # padded to whole bytes), the height and width in pixels.
     def get_ch(self, ch):
+        # print(f"Getting char '{ch}', self.stream={self.stream}")  # DEBUG LINE
         if self.cache_chars and ch in self.cache:
             return self.cache[ch]
+
+        # Check if stream is still valid
+        if not self.stream:
+            raise OSError("Font file stream is closed")
 
         # Read the index in memory, if not cached.
         if self.index != None:
