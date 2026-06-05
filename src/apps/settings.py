@@ -4,6 +4,7 @@ from time import sleep_ms
 
 import fonts.arial32px as arial32px
 from lib.random_password import generate_random_password
+from lib.wifi_web_service import derive_device_password
 from lib.uQR import QRCode, QRData, MODE_8BIT_BYTE
 from lib.dns import MicroDNSSrv
 from lib.microdot import Microdot, Response, send_file, with_form_data
@@ -62,7 +63,9 @@ class App(BaseApp):
 
         self.display1.fill(gc9a01.WHITE)
         self.display2.fill(gc9a01.WHITE)
-        self.badge_id = generate_random_password()
+        # Derive the badge id deterministically from the device's unique id so
+        # the hotspot SSID is stable across reboots (no re-pairing each boot).
+        self.badge_id = derive_device_password(prefix='', salt='badge', length=8)
 
         self.config['test_config_var'] = 'test'
         self.config.add('test_bool_config', BoolDropdownConfig('Test Bool Config', True))
@@ -70,6 +73,22 @@ class App(BaseApp):
         self.config.add('test_enum_config', EnumConfig('Test Enum Config', ['Option 1', 'Option 2', 'Option 3'], 'Option 1'))
 
         self.draw_status()
+
+        # Hosting the hotspot/website must outlive the idle-sleep timeout. The
+        # sleep service light-sleeps the badge (~2 min default), which tears down
+        # WiFi and never restarts it, so the AP silently disappears. This app
+        # configures OTHER apps over the web UI, so the hotspot has to keep
+        # serving even after you navigate away from this screen -- so sleep is
+        # disabled here and intentionally left disabled (it returns to its
+        # configured default on the next reboot). It is deliberately NOT restored
+        # on teardown: that would let the badge sleep and kill the live hotspot.
+        self._inhibit_sleep()
+        # An active BLE scan shares the radio with WiFi and starves it enough
+        # that DHCP replies get dropped, so clients associate but never get an
+        # IP ("IP configuration failure"). Pause scanning while hosting; like
+        # sleep, it is intentionally not resumed on teardown so the hotspot keeps
+        # serving new clients after you leave this screen.
+        self._pause_ble_scan()
 
         try: # no os.path.exists function
             wifi_file = open('wifi.json')
@@ -88,7 +107,9 @@ class App(BaseApp):
         # TODO start random password generation and QRCode generation
         # on a thread and mark loading until complete
         if ap:
-            self.password = generate_random_password()
+            # Deterministic password too, so the SSID *and* passphrase are stable
+            # across reboots and the QR/printed credentials stay valid.
+            self.password = derive_device_password(prefix='', salt='wifi', length=12)
             self.ssid = f'Badge {self.badge_id}'
 
         self.start_wifi(self.ssid, self.password, ap=ap)
@@ -122,16 +143,52 @@ class App(BaseApp):
             # For normal WiFi connections, display network information
             self.display_network_info()
 
+    def _pause_ble_scan(self):
+        """Stop BLE scanning so it stops starving WiFi/DHCP of radio time."""
+        try:
+            ble = self.controller.bsp.bluetooth.ble
+            if ble.active():
+                ble.gap_scan(None)
+        except Exception:
+            pass
+
+    def _inhibit_sleep(self):
+        """Disable idle-sleep so the hotspot/website keeps serving.
+
+        Intentionally not restored on teardown: the web config UI is used after
+        leaving this screen, and re-enabling sleep would let the badge drop the
+        live hotspot. Sleep returns to its configured default on the next reboot.
+        """
+        sleep_service = getattr(self.controller, 'sleep_service', None)
+        if sleep_service is None:
+            return
+        cfg = sleep_service.config.get('enabled')
+        if cfg is not None:
+            cfg['current'] = 'False'
+
     def start_wifi(self, essid, password, ap=True):
         import network
 
         if ap:
             ap = network.WLAN(network.AP_IF)
+            # Start from a clean slate; a stale AP/DHCP state stops leases.
+            ap.active(False)
+            sleep_ms(300)
             ap.active(True)
-            ap.config(essid=essid, authmode=network.AUTH_WPA_WPA2_PSK, password=password)
+            ap.config(essid=essid, authmode=network.AUTH_WPA2_PSK,
+                      password=password, channel=6, hidden=False)
 
             while not ap.active():
                 sleep_ms(10)
+
+            # Let the AP settle, then explicitly assert the gateway + DNS as the
+            # AP's own IP. On this firmware the DHCP server only hands out usable
+            # leases when ifconfig is set this way (clients otherwise fail to get
+            # an IP / show "IP configuration error").
+            sleep_ms(600)
+            ap_ip = ap.ifconfig()[0]
+            ap.ifconfig((ap_ip, '255.255.255.0', ap_ip, ap_ip))
+            sleep_ms(100)
 
             MicroDNSSrv.Create({ '*' : ap.ifconfig()[0] })
 
