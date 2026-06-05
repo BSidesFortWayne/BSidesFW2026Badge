@@ -784,10 +784,13 @@ class App(apps.app.BaseApp):
             self.game.update()
         elif self.on_menu:
             if self.menu_stage == App.TRY_AGAIN_MENU:
-                self.display1.draw_text(f'Try again?', 30, 100, self.fg_color.value())
+                self.display1.draw_text_centered(f'Try again?', 100, self.fg_color.value())
+            elif self.menu_stage == App.CHALLENGE_MENU:
+                self.display1.draw_text_centered(self.bluetooth.challenger, 90, self.fg_color.value())
+                self.display1.draw_text_centered('wants to play!', 125, self.fg_color.value())
             self.menu.render(SAFE_X, 30, self.display2.fbuf, self.display2.width, self.display2.height)
         elif self.bluetooth.challenge_state == Bluetooth.CHALLENGING:
-            self.display2.draw_text(self.bluetooth.message_to_show, 30, 100, self.fg_color.value())
+            self.display2.draw_text_centered(self.bluetooth.message_to_show, 100, self.fg_color.value())
         else:
             # Transient state between transitions — render the current menu rather than a blank
             # frame, but don't mutate navigation state (that can hijack an in-progress challenge/accept)
