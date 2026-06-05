@@ -503,7 +503,7 @@ class Bluetooth:
 
     async def advertise_task(self):
         while self.running:
-            if self.state != "IDLE":
+            if self.state != "IDLE" or self.app.game_running:
                 await asyncio.sleep_ms(300)
                 continue
             try:
