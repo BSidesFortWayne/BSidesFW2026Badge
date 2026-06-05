@@ -665,6 +665,8 @@ class App(apps.app.BaseApp):
                 for addr, entry in self.bluetooth.nearby.items():
                     if entry['handle'] == value:
                         self.on_menu = False
+                        self.bluetooth.challenge_state = Bluetooth.CHALLENGING
+                        self.bluetooth.show_message('Connecting...')
                         asyncio.create_task(self.bluetooth.challenge(entry))
         elif self.menu_stage == App.TRY_AGAIN_MENU:
             if value == "Yes":
@@ -787,9 +789,8 @@ class App(apps.app.BaseApp):
         elif self.bluetooth.challenge_state == Bluetooth.CHALLENGING:
             self.display2.draw_text(self.bluetooth.message_to_show, 30, 100, self.fg_color.value())
         else:
-            # No active game/menu/message — recover to the top menu instead of rendering a blank screen
-            self.player = None
-            self.switch_to_menu(App.LOCAL_MULTIPLAYER_MENU)
+            # Transient state between transitions — render the current menu rather than a blank
+            # frame, but don't mutate navigation state (that can hijack an in-progress challenge/accept)
             self.menu.render(SAFE_X, 30, self.display2.fbuf, self.display2.width, self.display2.height)
         self.display1.update()
         self.display2.update()
