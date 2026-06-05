@@ -6,7 +6,7 @@ import { registerBridge } from './bridge.js?v=2';
 import { registerEditorBridge } from './editor_bridge.js?v=3';
 import { initEditor, getModifiedFiles, getAllFiles } from './editor.js?v=16';
 import { initFlash } from './flash.js?v=17';
-import { initTabs, initConfigPanel, getPersistedConfigs } from './config_panel.js?v=8';
+import { initTabs, initConfigPanel, getPersistedConfigs } from './config_panel.js?v=9';
 
 const logContent = document.getElementById('log-content');
 const logToggle = document.getElementById('log-toggle');
@@ -285,10 +285,12 @@ try:
 
     _sc.Config.save = _cfg_save
 
-    # ColorConfig stores min/max/step but __init__ only takes (name, current);
-    # tolerate the extra fields so it can be rebuilt from its saved JSON.
-    def _color_init(self, name, current=None, **kwargs):
+    # ColorConfig: tolerate the inherited min/max/step fields on reload, and
+    # carry a 'framebuffer' flag so the colour picker knows whether the value is
+    # pre-swapped RGB565 (framebuf use) or standard RGB565 (direct display use).
+    def _color_init(self, name, current=None, framebuffer=True, **kwargs):
         _sc.RangeConfig.__init__(self, name, 0, 0xFFFF, current)
+        self['framebuffer'] = framebuffer
     _sc.ColorConfig.__init__ = _color_init
 
     print('[BOOT] Installed config JSON serialization fix')

@@ -7,13 +7,17 @@ from hardware_rev import HardwareRev
 from lib import queue
 from lib.microfont import MicroFont
 from lib.smart_config import BoolDropdownConfig
+from ui.menu import TextMenuWidget
 from ui.theme import (
-    BG, FG, ACCENT, MUTED,
-    FONT_HEADING, FONT_BODY,
-    PADDING, PADDING_SMALL, ITEM_HEIGHT, SAFE_Y,
+    BG, FG, MUTED,
+    FONT_HEADING,
+    ITEM_HEIGHT, SAFE_Y,
 )
 
-SELECTED_INDEX = 2
+# Number of rows shown in the scrolling list. Matches the original launcher
+# window (selection centred, two rows above / three below within the
+# circular safe area).
+VISIBLE_ITEMS = 6
 DOWN = 1
 UP = -1
 
@@ -28,12 +32,6 @@ class Menu(BaseApp):
         self.app_selection = self.controller.bsp.displays.display2
         self.display_center_text = self.controller.bsp.displays.display_center_text
         self.display_text = self.controller.bsp.displays.display_text
-
-        self.menu_items = sorted([str(app) for app in self.controller.app_directory if not app.hidden])
-        self.selected_index = 0
-        self.focus_index = 2
-        item_count = len(self.menu_items)
-        self.display_items = [self.menu_items[i % item_count] for i in range(self.selected_index - 2, self.selected_index + 4)]
 
         self.config.add("x_offset", 20)
         self.config.add("y_offset", SAFE_Y)
@@ -60,7 +58,17 @@ class Menu(BaseApp):
             framebuf.RGB565
         )
         self.fbuf_mv = memoryview(self.fbuf_mem)
-        self.font = MicroFont(FONT_BODY, cache_index=True, cache_chars=True)
+
+        # The scrolling app list is owned by a reusable menu widget. It is
+        # rendered into self.fbuf (sized to the live offsets above) and blitted
+        # to display2; wrap=True gives the original infinite-carousel feel.
+        self.menu_widget = TextMenuWidget(
+            sorted([str(app) for app in self.controller.app_directory if not app.hidden]),
+            width=self.fbuf_width,
+            visible_items=VISIBLE_ITEMS,
+            wrap=True,
+            buffer=self.fbuf_mv,
+        )
 
         # Display1 partial framebuffer for selected app name (center region only)
         self.d1_text_width = 180
@@ -76,7 +84,6 @@ class Menu(BaseApp):
         self.d1_font = MicroFont(FONT_HEADING, cache_index=True, cache_chars=True)
 
         self.queue = queue.Queue(maxsize=10)
-        self.index = 0
         self.torn_down = False
         self._dirty = True
         self._last_selected_name = ""
@@ -86,14 +93,6 @@ class Menu(BaseApp):
     def _draw_d1_static(self):
         self.title_display.fill(BG)
         # "Menu" heading near top
-        self.font.write(
-            "Menu",
-            memoryview(bytearray(self.d1_text_width * 30 * 2)),
-            framebuf.RGB565,
-            self.d1_text_width,
-            30,
-            0, 0, MUTED
-        )
         self.display_center_text("Menu", fg=MUTED, bg=BG, display_index=1)
 
     def _update_d1_selection(self, app_name):
@@ -134,7 +133,7 @@ class Menu(BaseApp):
         self.torn_down = True
         self.title_display.fill(BG)
         self.app_selection.fill(BG)
-        self.font = None
+        self.menu_widget = None
         self.d1_font = None
 
     def menu_move_down(self):
@@ -151,12 +150,12 @@ class Menu(BaseApp):
             elif button == 5:
                 self.menu_move_up()
             elif button == 6:
-                asyncio.create_task(self.controller.switch_app(self.display_items[SELECTED_INDEX]))
+                asyncio.create_task(self.controller.switch_app(self.menu_widget.selected_label))
         else:
             if button == 5:
                 self.menu_move_down()
             elif button == 4:
-                asyncio.create_task(self.controller.switch_app(self.display_items[SELECTED_INDEX]))
+                asyncio.create_task(self.controller.switch_app(self.menu_widget.selected_label))
 
     async def update(self):
         if self.torn_down:
@@ -175,8 +174,6 @@ class Menu(BaseApp):
         display = self.controller.bsp.displays.display2
         animate = self.config['animate'].value()
 
-        display_items = self.display_items
-
         if not self.queue.empty():
             direction = await self.queue.get()
             if animate:
@@ -190,34 +187,13 @@ class Menu(BaseApp):
                     )
                     await asyncio.sleep(0.01)
 
-            self.selected_index = (self.selected_index + direction) % len(self.menu_items)
-            item_count = len(self.menu_items)
-            display_items = [self.menu_items[i % item_count] for i in range(self.selected_index - 2, self.selected_index + 4)]
+            if direction == DOWN:
+                self.menu_widget.move_down()
+            else:
+                self.menu_widget.move_up()
 
         fbuf.fill(BG)
-        for i, item in enumerate(display_items):
-            item_y = i * ITEM_HEIGHT
-            is_selected = (i == SELECTED_INDEX)
-            distance = abs(i - SELECTED_INDEX)
-
-            if is_selected:
-                fbuf.rect(0, item_y, fbuf_width, ITEM_HEIGHT, ACCENT, True)
-                text_color = BG
-            elif distance == 1:
-                text_color = FG
-            else:
-                text_color = MUTED
-
-            self.font.write(
-                item,
-                fbuf_mv,
-                framebuf.RGB565,
-                fbuf_width,
-                fbuf_height,
-                PADDING,
-                item_y + PADDING_SMALL,
-                text_color
-            )
+        self.menu_widget.render(0, 0, fbuf, fbuf_width, fbuf_height)
 
         display.blit_buffer(
             fbuf_mv,
@@ -227,10 +203,9 @@ class Menu(BaseApp):
             fbuf_height
         )
 
-        self.display_items = display_items
         self._dirty = False
 
         # Update display1 with selected app name
-        self._update_d1_selection(display_items[SELECTED_INDEX])
+        self._update_d1_selection(self.menu_widget.selected_label)
 
         self.controller.battery.draw_battery(self.controller.displays.display1, (120-15, 240-60))

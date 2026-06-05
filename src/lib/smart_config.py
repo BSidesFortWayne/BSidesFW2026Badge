@@ -84,11 +84,19 @@ class RangeConfig(SmartConfigValue):
 
 
 class ColorConfig(RangeConfig):
-    def __init__(self, name: str, current = None, **kwargs):
-        # **kwargs absorbs the inherited min/max/step fields that are present
-        # in a ColorConfig's saved JSON, so Config.load() can reconstruct it via
-        # ColorConfig(**value) without a "unexpected keyword argument" error.
+    def __init__(self, name: str, current = None, framebuffer: bool = True, **kwargs):
+        # framebuffer indicates how the stored RGB565 value is used, so the web
+        # config editor's colour picker converts hex<->565 the right way round:
+        #   True  -> value is pre-swapped RGB565, for drawing into a
+        #            framebuf.FrameBuffer (saved little-endian, panel reads it
+        #            big-endian). Matches drivers/displays.rgb_to_565 / theme._swap.
+        #   False -> value is standard RGB565, for direct display.* calls
+        #            (display.fill/pixel/line/...). Matches gc9a01.RED etc.
+        # **kwargs absorbs the inherited min/max/step fields present in a
+        # ColorConfig's saved JSON so Config.load() can reconstruct it via
+        # ColorConfig(**value) without an "unexpected keyword argument" error.
         super().__init__(name, 0, 0xFFFF, current)
+        self['framebuffer'] = framebuffer
 
 
 class EnumConfig(SmartConfigValue):
