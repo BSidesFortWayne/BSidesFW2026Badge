@@ -124,6 +124,7 @@ class Game:
         self.width = self.grid.width
 
         self.turn = 1
+        self.turn_number = 1
         self.player_position = 0
         self.grid.grid[0][0] = 1
     
@@ -212,6 +213,7 @@ class Game:
             self.app.game_running = False
             return
 
+        self.turn_number += 1
         if self.turn == 1:
             self.turn = 2
         else:
@@ -248,6 +250,11 @@ class FramebufferDisplay:
             color
         )
 
+    def draw_text_centered(self, text, y, color):
+        w, _ = self.font.measure(text)
+        x = max(0, (self.width - w) // 2)
+        self.draw_text(text, x, y, color)
+
 class Bluetooth:
     _SERVICE_UUID = bluetooth.UUID("a3c87500-8ed3-4bdf-8a39-a01bebede295")
     _CHAL_UUID    = bluetooth.UUID("a3c87502-8ed3-4bdf-8a39-a01bebede295")
@@ -260,8 +267,9 @@ class Bluetooth:
 
     NO_CHALLENGE = 0
     CHALLENGING = 1
-    CHALLENGE_ACCEPTED = 2
-    CHALLENGE_DECLINED = 3
+
+    DECLINE_REMATCH = -1
+    ACCEPT_REMATCH = -2
 
     def __init__(self, app, identifier):
         self.identifier = identifier
@@ -273,6 +281,8 @@ class Bluetooth:
         self.message_to_show = ""
         self.challenge_state = Bluetooth.NO_CHALLENGE
         self.running = True
+        self.opponent_rematching = False
+        self.rematching = False
 
         self._service = aioble.Service(Bluetooth._SERVICE_UUID)
         self._chal = aioble.Characteristic(
@@ -288,12 +298,12 @@ class Bluetooth:
     async def accept(self):
         self._chal.notify(self.active_connection, b'ACCEPT')
         asyncio.create_task(self.receive_game_data())
-        self.challenge_state = Bluetooth.CHALLENGE_ACCEPTED
+        self.app.start_new_game()
         self.app._dirty = True
     
     async def decline(self):
         self._chal.notify(self.active_connection, b'DECLINE')
-        self.challenge_state = Bluetooth.CHALLENGE_DECLINED
+        self.exit_game()
         await self.active_connection.disconnect()
         self.state = "IDLE"
         self.app._dirty = True
@@ -314,12 +324,58 @@ class Bluetooth:
                     else:
                         player = 1
                     
+                    if answer == Bluetooth.DECLINE_REMATCH:
+                        await self.disconnected(message='Declined')
+                        break
+                    elif answer == Bluetooth.ACCEPT_REMATCH:
+                        self.opponent_rematching = True
+                        if self.rematching:
+                            self._start_rematch()
+                        self.app._dirty = True
+                        continue
+
                     self.app.game.button_press(answer, player)
                     self.app._dirty = True
         except OSError as e:
-            if e.errno == -128:
-                print('Lost connection')
-                self.exit_game()
+            if e.errno == -128 and not self.state == "IDLE":
+                await self.disconnected()
+        except Exception as e:
+            if not self.state == "IDLE":
+                await self.disconnected()
+            else:
+                print("receive_game_data_task exited: " + str(e))
+
+    async def disconnected(self, message=None):
+        if message == None:
+            message = "Lost connection"
+        print(message)
+        self.state = "IDLE"
+        self.challenge_state = Bluetooth.CHALLENGING
+        self.app.game_running = False
+        self.app.on_menu = False
+        self.show_message(message)
+        self.app.exit_to_menu_next_press = True
+        self.app._dirty = True
+        try:
+            await self.active_connection.disconnect()
+        except:
+            pass
+
+    def request_rematch(self):
+        self.send_game_data(str(Bluetooth.ACCEPT_REMATCH))
+        if self.opponent_rematching:
+            self._start_rematch()
+        else:
+            self.rematching = True
+            self.challenge_state = Bluetooth.CHALLENGING
+            self.show_message('Waiting...')
+
+    def _start_rematch(self):
+        self.rematching = False
+        self.opponent_rematching = False
+        self.challenge_state = Bluetooth.NO_CHALLENGE
+        self.app.start_new_game()
+        self.app._dirty = True
 
     def exit_game(self):
         self.state = "IDLE"
@@ -336,48 +392,92 @@ class Bluetooth:
     async def challenge(self, entry):
         self.state = "BUSY"
         self.challenge_state = Bluetooth.CHALLENGING
-        try:
-            self.active_connection = await entry['device'].connect(timeout_ms=5000)
-        except asyncio.TimeoutError:
-            self.state = "IDLE"
-            self.show_message('Could not connect')
-            return
-        
-        self.opponent = entry
+        self.show_message('Connecting...')
+        for attempt in range(1, 11):
+            entry['device']._connection = None
+            try:
+                self.active_connection = await entry['device'].connect(timeout_ms=5000)
+            except (asyncio.TimeoutError, OSError):
+                print(f'Connect failed, retrying {attempt}/10')
+                await asyncio.sleep_ms(300)
+                continue
 
-        try:
-            self.service = await self.active_connection.service(Bluetooth._SERVICE_UUID)
-            self.chal = await self.service.characteristic(Bluetooth._CHAL_UUID)
-            await self.chal.subscribe(notify=True)
-            await self.chal.write(b"CHAL:" + self.identifier.encode(), response=True)
-            self.show_message('Waiting for response')
-            answer = await self.chal.notified(timeout_ms=30_000)
-            if answer == b'ACCEPT':
-                self.challenge_state = Bluetooth.CHALLENGE_ACCEPTED
-                self.app.player = 1
-                asyncio.create_task(self.receive_game_data())
-                self.app._dirty = True
+            self.opponent = entry
+
+            try:
+                if not self.active_connection.is_connected():
+                    print(f'Connection dropped before discovery, retrying {attempt}/10')
+                    await asyncio.sleep_ms(300)
+                    continue
+                self.service = await self.active_connection.service(Bluetooth._SERVICE_UUID)
+                self.chal = (
+                    await self.service.characteristic(Bluetooth._CHAL_UUID)
+                    if self.service else None
+                )
+                if self.chal is None:
+                    print(f'Service not ready, retrying {attempt}/10')
+                    try:
+                        await self.active_connection.disconnect()
+                    except:
+                        pass
+                    await asyncio.sleep_ms(300)
+                    continue
+                await self.chal.subscribe(notify=True)
+                await self.chal.write(b"CHAL:" + self.identifier.encode(), response=True)
+                self.show_message('Waiting...')
+                answer = await self.chal.notified(timeout_ms=30_000)
+
+            except asyncio.TimeoutError:
+                await self.disconnected(message="No answer")
+                return
+
+            except OSError as e:
+                if e.errno == -128:
+                    print(f'Connection dropped, retrying {attempt}/10')
+                    try:
+                        await self.active_connection.disconnect()
+                    except:
+                        pass
+                    await asyncio.sleep_ms(300)
+                    continue
+                raise
+
+            except TypeError:
+                print(f'Connection dropped during discovery, retrying {attempt}/10')
+                try:
+                    await self.active_connection.disconnect()
+                except:
+                    pass
+                await asyncio.sleep_ms(300)
+                continue
+
             else:
-                self.challenge_state = Bluetooth.CHALLENGE_DECLINED
-                self.app._dirty = True
-                await self.active_connection.disconnect()
-                self.state = "IDLE"
-        except asyncio.TimeoutError:
-            self.show_message('No answer')
-            await self.active_connection.disconnect()
-            self.state = "IDLE"
-        except OSError as e:
-            if e.errno == -128:
-                await self.active_connection.disconnect()
-                self.state = "IDLE"
-                return await self.challenge(entry)
+                if answer == b'ACCEPT':
+                    self.app.player = 1
+                    self.app.start_new_game()
+                    asyncio.create_task(self.receive_game_data())
+                    self.app._dirty = True
+                else:
+                    await self.disconnected(message="Declined")
+                return
+
+        await self.disconnected(message="Could not connect")
+
 
     async def _handle_incoming(self, connection):
         self.state = "BUSY"
         self.active_connection = connection
         try:
             self.service = await self.active_connection.service(Bluetooth._SERVICE_UUID)
-            self.chal = await self.service.characteristic(Bluetooth._CHAL_UUID)
+            self.chal = (
+                await self.service.characteristic(Bluetooth._CHAL_UUID)
+                if self.service else None
+            )
+            if self.chal is None:
+                print('Incoming peer service not found')
+                await connection.disconnect()
+                self.state = "IDLE"
+                return
             await self.chal.subscribe(notify=True)
             _, data = await self._chal.written(timeout_ms=10_000)
             if data.startswith(b"CHAL:"):
@@ -505,6 +605,7 @@ class App(apps.app.BaseApp):
         self.winner = None
         self.winner_screen = False
         self.start_game_next_press = False
+        self.exit_to_menu_next_press = False
         self._dirty = True
 
         self.menu_stage = App.LOCAL_MULTIPLAYER_MENU
@@ -554,8 +655,13 @@ class App(apps.app.BaseApp):
         elif self.menu_stage == App.TRY_AGAIN_MENU:
             if value == "Yes":
                 self.on_menu = False
-                self.start_new_game()
+                if self.player == None:
+                    self.start_new_game()
+                else:
+                    self.bluetooth.request_rematch()
             elif value == "No":
+                if self.player != None:
+                    self.bluetooth.send_game_data(str(Bluetooth.DECLINE_REMATCH))
                 asyncio.create_task(self.controller.switch_app("Menu"))
         elif self.menu_stage == App.CHALLENGE_MENU:
             if value == "Accept":
@@ -565,10 +671,55 @@ class App(apps.app.BaseApp):
             elif value == "Decline":
                 asyncio.create_task(self.bluetooth.decline())
                 self.switch_to_menu(App.MATCHMAKING_MENU)
+                self.exit_to_menu_next_press = True
 
     def start_new_game(self):
         self.game = Game(self)
         self.game_running = True
+
+    def _player_name(self, player_num):
+        if self.player is None:
+            return f'Player {player_num}'
+        if player_num == self.player:
+            return self.ble_identifier
+        if self.bluetooth.challenger:
+            return self.bluetooth.challenger
+        opponent = getattr(self.bluetooth, 'opponent', None)
+        if opponent:
+            return opponent.get('handle', f'Player {player_num}')
+        return f'Player {player_num}'
+
+    def _winner_name(self):
+        return self._player_name(self.winner)
+
+    def _opponent_rssi(self):
+        if self.player is None:
+            return None
+        bt = self.bluetooth
+        opponent = getattr(bt, 'opponent', None)
+        if opponent and 'rssi' in opponent:
+            return opponent['rssi']
+        if bt.challenger:
+            for entry in bt.nearby.values():
+                if entry['handle'] == bt.challenger:
+                    return entry['rssi']
+        return None
+
+    def _draw_game_hud(self):
+        d = self.display2
+        fg = self.fg_color.value()
+        d.draw_text_centered(f'Turn {self.game.turn_number}', 15, fg)
+
+        turn_color = (
+            self.player1_color.value() if self.game.turn == 1
+            else self.player2_color.value()
+        )
+        d.draw_text_centered(self._player_name(self.game.turn), 100, turn_color)
+        d.draw_text_centered('to move', 130, fg)
+
+        rssi = self._opponent_rssi()
+        if rssi is not None:
+            d.draw_text_centered(f'RSSI {rssi}', 205, fg)
 
     def button_press(self, button):
         if self.game_running:
@@ -590,6 +741,11 @@ class App(apps.app.BaseApp):
             self.winner = None
             self.winner_screen = False
             self.switch_to_menu(App.TRY_AGAIN_MENU)
+        
+        if self.exit_to_menu_next_press:
+            self.switch_to_menu(App.MATCHMAKING_MENU)
+            self.bluetooth.challenge_state = Bluetooth.NO_CHALLENGE
+            self.exit_to_menu_next_press = False
 
         if not self.winner == None and self.winner_screen:
             self.start_game_next_press = True
@@ -603,12 +759,12 @@ class App(apps.app.BaseApp):
         self.display1.fbuf.fill(self.bg_color.value())
         self.display2.fbuf.fill(self.bg_color.value())
 
-        keep_dirty = False
-
         if self.game_running:
             self.game.update()
+            self._draw_game_hud()
         elif self.winner_screen:
-            self.display2.draw_text(f'Player {self.winner} wins!', 30, 100, self.fg_color.value())
+            self.display2.draw_text_centered(self._winner_name(), 90, self.fg_color.value())
+            self.display2.draw_text_centered('won!', 125, self.fg_color.value())
             self.game.update()
         elif self.on_menu:
             if self.menu_stage == App.TRY_AGAIN_MENU:
@@ -616,16 +772,9 @@ class App(apps.app.BaseApp):
             self.menu.render(SAFE_X, 30, self.display2.fbuf, self.display2.width, self.display2.height)
         elif self.bluetooth.challenge_state == Bluetooth.CHALLENGING:
             self.display2.draw_text(self.bluetooth.message_to_show, 30, 100, self.fg_color.value())
-        elif self.bluetooth.challenge_state == Bluetooth.CHALLENGE_ACCEPTED:
-            self.start_new_game()
-            keep_dirty = True
-        elif self.bluetooth.challenge_state == Bluetooth.CHALLENGE_DECLINED:
-            self.display2.draw_text('Declined', 30, 100, self.fg_color.value())
         self.display1.update()
         self.display2.update()
-
-        if not keep_dirty:
-            self._dirty = False
+        self._dirty = False
 
     async def teardown(self):
         self.bluetooth.running = False

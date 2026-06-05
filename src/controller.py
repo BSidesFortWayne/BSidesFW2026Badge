@@ -150,7 +150,13 @@ class Controller(IController):
         
         # Start services if not already started
         await self.start_services()
-        
+
+        # Poll buttons from the asyncio loop instead of the hardware Timer ISR.
+        # This deinits the Timer set up in the Buttons driver and takes over, so
+        # the button-dispatch chain runs with full main-stack headroom and no
+        # longer overflows on top of a deep render/BLE stack.
+        asyncio.create_task(self.bsp.buttons.poll_loop())
+
         while True:
             x = time.ticks_ms()
             

@@ -1,6 +1,7 @@
 from hardware_rev import HardwareRev
 from machine import Pin, Timer 
-import time 
+import time
+import asyncio
 from drivers.pca9535 import PCA9535
 from drivers.base import Driver
 
@@ -46,15 +47,22 @@ class Buttons(Driver):
         self.last_release_times: list[int] = [0 for _ in range(total_buttons)]
         self.last_long_press_time: list[int] = [0 for _ in range(total_buttons)]
 
-        # V1 hardware uses all GPIO buttons
+        # V1 hardware uses all GPIO buttons (pure IRQ, no polling).
+        # V2/V3 poll the IO expander. A hardware Timer drives polling by
+        # default so apps launched standalone (single_app_runner, which never
+        # starts controller.run()) still get input. Once the controller's
+        # asyncio loop is up it calls poll_loop(), which deinits this Timer and
+        # takes over — polling from the asyncio loop keeps the callback
+        # fan-out on a shallow stack instead of nesting inside a Timer ISR.
+        self._timer = None
         if hardware_rev == HardwareRev.V2:
-            timer = Timer(3)
-            timer.init(mode=Timer.PERIODIC, period=50, callback=self.poll_buttons)
+            self._timer = Timer(3)
+            self._timer.init(mode=Timer.PERIODIC, period=50, callback=self.poll_buttons)
 
         elif hardware_rev == HardwareRev.V3:
             # TODO add interrupt handler for pca9535 for v3
-            timer = Timer(3)
-            timer.init(mode=Timer.PERIODIC, period=50, callback=self.poll_buttons)
+            self._timer = Timer(3)
+            self._timer.init(mode=Timer.PERIODIC, period=50, callback=self.poll_buttons)
 
     def v2_init(self):
         self.iox_button_map = [
@@ -86,8 +94,21 @@ class Buttons(Driver):
         self.last_long_press_time[button] = 0
 
 
+    async def poll_loop(self):
+        # Take over button polling from the hardware Timer ISR once the asyncio
+        # loop is running. Resuming from sleep_ms keeps the stack shallow, so
+        # the press/click callback fan-out never overflows on top of a deep
+        # render/BLE stack. No-op on IRQ-only hardware (V1), where _timer is None.
+        if self._timer is None:
+            return
+        self._timer.deinit()
+        self._timer = None
+        while True:
+            self.poll_buttons()
+            await asyncio.sleep_ms(50)
+
     # This is a wrapper that polls the button inputs
-    def poll_buttons(self, timer):
+    def poll_buttons(self, timer=None):
         inputs = self.iox.read_all_pca9535_inputs()
         self.iox_button_handler(inputs)
 
