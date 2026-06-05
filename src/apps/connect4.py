@@ -309,7 +309,17 @@ class Bluetooth:
         self.app._dirty = True
     
     def send_game_data(self, message):
-        self._chal.notify(self.active_connection, b'GAME:' + message.encode())
+        conn = self.active_connection
+        if conn is not None and conn.is_connected():
+            try:
+                self._chal.notify(conn, b'GAME:' + message.encode())
+                return True
+            except Exception as e:
+                print('send_game_data failed: ' + str(e))
+        # Opponent is gone — surface it instead of crashing
+        if self.state != "IDLE":
+            asyncio.create_task(self.disconnected(message='Opponent left'))
+        return False
     
     async def receive_game_data(self):
         try:
@@ -362,7 +372,10 @@ class Bluetooth:
             pass
 
     def request_rematch(self):
-        self.send_game_data(str(Bluetooth.ACCEPT_REMATCH))
+        if not self.send_game_data(str(Bluetooth.ACCEPT_REMATCH)):
+            # Opponent already left — return to matchmaking instead of blanking
+            self.exit_game()
+            return
         if self.opponent_rematching:
             self._start_rematch()
         else:
@@ -640,6 +653,7 @@ class App(apps.app.BaseApp):
         if self.menu_stage == App.LOCAL_MULTIPLAYER_MENU:
             if value == "Local":
                 self.on_menu = False
+                self.player = None
                 self.start_new_game()
             elif value == "Multiplayer":
                 self.local = False
@@ -772,6 +786,11 @@ class App(apps.app.BaseApp):
             self.menu.render(SAFE_X, 30, self.display2.fbuf, self.display2.width, self.display2.height)
         elif self.bluetooth.challenge_state == Bluetooth.CHALLENGING:
             self.display2.draw_text(self.bluetooth.message_to_show, 30, 100, self.fg_color.value())
+        else:
+            # No active game/menu/message — recover to the top menu instead of rendering a blank screen
+            self.player = None
+            self.switch_to_menu(App.LOCAL_MULTIPLAYER_MENU)
+            self.menu.render(SAFE_X, 30, self.display2.fbuf, self.display2.width, self.display2.height)
         self.display1.update()
         self.display2.update()
         self._dirty = False
