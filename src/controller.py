@@ -32,9 +32,11 @@ async def _maybe_await(result):
 
 
 class Controller(IController):
-    def __init__(self, displays, start_app_on_launch: bool = True):
+    def __init__(self, displays, isSimulator, start_app_on_launch: bool = True):
         if not displays:
             displays = Displays()
+        
+        self.isSimulator = isSimulator
         
         super().__init__(HardwareRev.V3, displays)
 

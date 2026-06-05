@@ -1,0 +1,18 @@
+# Used by web_simulator/Dockerfile (build context: this directory).
+# Send only what the web simulator build script reads.
+*
+!src/
+!web_simulator/
+
+# Heavy / regenerated subtrees inside web_simulator/
+web_simulator/.deps/
+web_simulator/build/
+web_simulator/**/__pycache__/
+web_simulator/**/*.pyc
+
+# Editor / VCS noise
+**/.git
+**/.gitignore
+**/.DS_Store
+**/.idea
+**/.vscode

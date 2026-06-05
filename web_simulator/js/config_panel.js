@@ -224,20 +224,33 @@ function buildRow(scopeKey, key, value) {
     return buildTextRow(row, scopeKey, key, value);
 }
 
-// ColorConfig values are stored in the firmware's pre-swapped RGB565 form
-// (see drivers/displays.rgb_to_565 and ui/theme._swap): framebuf saves the
-// uint16 little-endian and the panel reads it big-endian, so a directly-drawn
-// color is byte-swapped relative to standard RGB565. These two helpers mirror
-// rgb_to_565 exactly, so a colour picked here renders as that colour.
-function hexToRgb565(hex) {
+// A ColorConfig stores an RGB565 value in one of two conventions, indicated by
+// its `framebuffer` flag (see lib/smart_config.ColorConfig):
+//   framebuffer=true  -> PRE-SWAPPED RGB565: framebuf saves the uint16
+//     little-endian and the panel reads it big-endian, so a value drawn into a
+//     framebuf is byte-swapped vs standard. Mirrors drivers/displays.rgb_to_565.
+//   framebuffer=false -> STANDARD RGB565 (R in the high bits), used by direct
+//     display.* calls. Mirrors gc9a01.RED etc. and apps/settings.py.
+// Each convention needs its own hex<->565 conversion so the picked colour
+// renders as that colour.
+function parseHex(hex) {
     const m = /^#?([0-9a-fA-F]{6})$/.exec(hex || '');
-    if (!m) return 0;
+    if (!m) return null;
     const n = parseInt(m[1], 16);
-    const r = (n >> 16) & 0xFF, g = (n >> 8) & 0xFF, b = n & 0xFF;
-    return (r & 0xF8) | ((g & 0xE0) >> 5) | ((g & 0x1C) << 11) | ((b & 0xF8) << 5);
+    return [(n >> 16) & 0xFF, (n >> 8) & 0xFF, n & 0xFF];
+}
+function toHexStr(r, g, b) {
+    return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
 }
 
-function rgb565ToHex(v) {
+// Pre-swapped (framebuffer) — matches rgb_to_565.
+function hexToRgb565Swapped(hex) {
+    const rgb = parseHex(hex);
+    if (!rgb) return 0;
+    const [r, g, b] = rgb;
+    return (r & 0xF8) | ((g & 0xE0) >> 5) | ((g & 0x1C) << 11) | ((b & 0xF8) << 5);
+}
+function rgb565SwappedToHex(v) {
     v &= 0xFFFF;
     let r = v & 0xF8;
     let g = ((v & 0x07) << 5) | ((v & 0xE000) >> 11);
@@ -245,7 +258,23 @@ function rgb565ToHex(v) {
     r |= r >> 5;   // replicate high bits into the low bits for a fuller 8-bit value
     g |= g >> 6;
     b |= b >> 5;
-    return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+    return toHexStr(r, g, b);
+}
+
+// Standard RGB565 (direct display) — matches apps/settings.py.
+function hexToRgb565Std(hex) {
+    const rgb = parseHex(hex);
+    if (!rgb) return 0;
+    const [r, g, b] = rgb;
+    return ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
+}
+function rgb565StdToHex(v) {
+    v &= 0xFFFF;
+    let r = (v >> 11) & 0x1F, g = (v >> 5) & 0x3F, b = v & 0x1F;
+    r = (r << 3) | (r >> 2);
+    g = (g << 2) | (g >> 4);
+    b = (b << 3) | (b >> 2);
+    return toHexStr(r, g, b);
 }
 
 function buildColorRow(row, scopeKey, key, cfg) {
@@ -257,17 +286,23 @@ function buildColorRow(row, scopeKey, key, cfg) {
     labelEl.appendChild(nameSpan);
     labelEl.appendChild(valSpan);
 
+    // Default to the framebuffer (pre-swapped) convention when the flag is
+    // absent, matching how the picker behaved before the flag existed.
+    const swapped = cfg.framebuffer !== false;
+    const toHex = swapped ? rgb565SwappedToHex : rgb565StdToHex;
+    const fromHex = swapped ? hexToRgb565Swapped : hexToRgb565Std;
+
     const input = document.createElement('input');
     input.type = 'color';
-    input.value = rgb565ToHex(cfg.current);
+    input.value = toHex(cfg.current);
     valSpan.textContent = input.value;
 
     input.addEventListener('input', () => {
         valSpan.textContent = input.value;
-        scheduleUpdate(scopeKey, key, hexToRgb565(input.value), 250);
+        scheduleUpdate(scopeKey, key, fromHex(input.value), 250);
     });
     input.addEventListener('change', () => {
-        scheduleUpdate(scopeKey, key, hexToRgb565(input.value), 0);
+        scheduleUpdate(scopeKey, key, fromHex(input.value), 0);
     });
 
     row.appendChild(labelEl);

@@ -9,7 +9,7 @@ gc.collect()
 
 
 async def main(displays):
-    controller = Controller(displays)
+    controller = Controller(displays, SIMULATOR)
 
     # Main thread, should be last to run
     asyncio.create_task(controller.run())
