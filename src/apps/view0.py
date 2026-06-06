@@ -29,7 +29,7 @@ class App(BaseApp):
         self.config.add('first_name', 'WhatAbout')
         self.config.add('last_name', 'Bob')
         self.config.add('company', 'BSidesFW')
-        self.config.add('title', '2025')
+        self.config.add('title', '2026')
         self.config.add('background_image', "img/bsides_logo.jpg")
         self.config.add('bg_color_index', 0)
         self.config.add('fg_color_index', 1)
