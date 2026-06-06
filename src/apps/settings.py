@@ -235,7 +235,7 @@ class App(BaseApp):
                 return Template('home.html').render(
                     path='/',
                     badge_id=self.badge_id,
-                    battery_voltage=str(self.controller.battery.mv_average.average()/100) + 'v',
+                    battery_voltage=str(self.controller.battery.mv_average.average()/1000) + 'v',
                     battery_percentage='{}%'.format(self.controller.battery.get_battery_percentage()),
                     current_app=self.controller.current_view.name if self.controller.current_view else 'None',
                 )
@@ -300,9 +300,8 @@ class App(BaseApp):
                             print(f"Skipping unknown system config: {config_name}")
                             continue
                         
-                        existing_config = system_config[config_name]
                         print(f"Updating system config: {config_name} = {value}")
-                        self._update_config_value(existing_config, value)
+                        self._update_config_value(system_config, config_name, value)
                             
                 elif config_type == 'service':
                     # Handle service configuration updates
@@ -316,9 +315,8 @@ class App(BaseApp):
                                 print(f"Skipping unknown config: {config_name} for service {service_name}")
                                 continue
                             
-                            existing_config = service_config[config_name]
                             print(f"Updating {service_name} service config: {config_name} = {value}")
-                            self._update_config_value(existing_config, value)
+                            self._update_config_value(service_config, config_name, value)
                             
                 else:
                     # Handle app configuration updates (existing logic)
@@ -331,9 +329,8 @@ class App(BaseApp):
                             print(f"Skipping unknown config: {config_name} for app {app}")
                             continue
                         
-                        existing_config = app_config[config_name]
                         print(f"Updating {app} config: {config_name} = {value}")
-                        self._update_config_value(existing_config, value)
+                        self._update_config_value(app_config, config_name, value)
 
                 return Response.redirect('/config')
             
@@ -345,29 +342,36 @@ class App(BaseApp):
             traceback.print_exc()
             return
         
-    def _update_config_value(self, existing_config, value):
-        """Helper method to update config values based on their type."""
+    def _update_config_value(self, config, config_name, value):
+        """Update a value inside `config` (a Config object) and persist it.
+
+        The value must be written back through the Config object so that
+        Config.save() runs -- mutating the nested SmartConfigValue dict in place
+        does not trigger a save, and rebinding a local would not persist at all.
+        """
+        existing_config = config[config_name]
         existing_type = type(existing_config)
         if existing_type is not str and existing_type is not int and 'type' in existing_config:
             existing_config_type = existing_config['type']
-            # Convert value
+            value = value[0] if isinstance(value, list) else value
             if existing_config_type == 'BoolDropdownConfig':
-                value = True if len(str(value)) == 2 else False
-            else:
-                value = value[0] if isinstance(value, list) else value
-            if existing_config_type == 'BoolDropdownConfig':
-                existing_config['current'] = value
+                # The checkbox submits "on"/"True" only when checked; store the
+                # 'True'/'False' string that BoolDropdownConfig.value() expects.
+                existing_config['current'] = 'True' if str(value).lower() in ('on', 'true') else 'False'
             elif existing_config_type == 'EnumConfig':
                 existing_config['current'] = value
             elif existing_config_type == 'ColorConfig':
                 existing_config['current'] = hex_to_rgb565(str(value))
             elif existing_config_type == 'RangeConfig':
                 existing_config['current'] = int(value)
+            # Nested mutation doesn't trip Config.__setitem__, so save explicitly.
+            config.save()
         elif existing_type is str:
-            existing_config = str(value[0] if isinstance(value, list) else value)
+            # Assigning through Config.__setitem__ persists the change.
+            config[config_name] = str(value[0] if isinstance(value, list) else value)
         elif existing_type is int:
             try:
-                existing_config = int(value[0] if isinstance(value, list) else value)
+                config[config_name] = int(value[0] if isinstance(value, list) else value)
             except ValueError:
                 pass
         else:

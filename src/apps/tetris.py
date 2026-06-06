@@ -184,7 +184,11 @@ class View(BaseApp):
         }
 
         if self.collision(x, y, self.next_block):
-            asyncio.run(self.game_over())
+            # Don't call asyncio.run() here: add_block() runs synchronously
+            # from inside the already-running update() loop, and starting a
+            # nested event loop corrupts the scheduler (StoreProhibited panic
+            # on the ESP32). Just flag it — update() draws the game-over
+            # screen on its next tick.
             self.is_game_over = True
             return
 
